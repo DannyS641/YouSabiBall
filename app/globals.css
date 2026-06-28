@@ -1,26 +1,67 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ── HARDWOOD Design Tokens (Tailwind v4 @theme) ──────────────────────── */
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-bg:           #F4F5F7;
+  --color-ink:          #16181D;
+  --color-surface:      #FFFFFF;
+  --color-border:       #E7E9EE;
+  --color-border-lt:    #F0F1F4;
+  --color-muted:        #9CA1AC;
+  --color-muted2:       #5C616C;
+  --color-muted3:       #C8CCD4;
+  --color-accent:       #E2622C;
+  --color-accent-lt:    #FF8A4C;
+  --color-purple:       #7A3FF2;
+  --color-green:        #1F9D6B;
+  --color-pink:         #C23B6B;
+  --color-coin:         #E0A93B;
+
+  --color-tier-bronze:  #B07A42;
+  --color-tier-silver:  #9AA0AB;
+  --color-tier-gold:    #E0A93B;
+  --color-tier-diamond: #4FB0E0;
+  --color-tier-legend:  #7A3FF2;
+
+  --color-pos-pg: #3B3FB6;
+  --color-pos-sg: #3E78D6;
+  --color-pos-sf: #1F9D6B;
+  --color-pos-pf: #E2622C;
+  --color-pos-c:  #C23B6B;
+
+  --shadow-card: 0 1px 2px rgba(16,24,40,.04);
+  --shadow-md:   0 4px 12px rgba(16,24,40,.10);
+  --shadow-lg:   0 10px 30px rgba(16,24,40,.18);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ── Resets ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #F4F5F7;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  color: #16181D;
+  -webkit-font-smoothing: antialiased;
 }
+input, button, textarea { font-family: inherit; }
+
+/* ── Scrollbar ───────────────────────────────────────────────────────── */
+::-webkit-scrollbar { height: 9px; width: 9px; }
+::-webkit-scrollbar-thumb { background: #D2D5DD; border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Keyframes ───────────────────────────────────────────────────────── */
+@keyframes popIn {
+  from { transform: scale(0.85); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+@keyframes slideUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.animate-pop-in   { animation: popIn   0.3s ease both; }
+.animate-slide-up { animation: slideUp 0.25s ease both; }
