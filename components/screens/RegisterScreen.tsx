@@ -35,7 +35,7 @@ export default function RegisterScreen() {
     setLoading(true); setError(null);
     const result = await signIn(email.trim(), password);
     setLoading(false);
-    if (!result.ok) { setError(result.error); return; }
+    if (!result.ok) { setError(result.error ?? 'Sign in failed'); return; }
     setAuthUser({ id: '', email: email.trim() });
     play(result.name ?? (email.split('@')[0]));
   }
@@ -45,7 +45,7 @@ export default function RegisterScreen() {
     setLoading(true); setError(null);
     const result = await signUp(email.trim(), password, displayName.trim());
     setLoading(false);
-    if (!result.ok) { setError(result.error); return; }
+    if (!result.ok) { setError(result.error ?? 'Sign up failed'); return; }
     setAuthUser({ id: '', email: email.trim() });
     play(result.name ?? (displayName.trim() || (email.split('@')[0])));
   }
@@ -54,44 +54,46 @@ export default function RegisterScreen() {
     <div style={{
       minHeight: '100vh', display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
-      background: '#16181D', padding: 24,
+      background: '#F4F5F7', padding: 24,
     }}>
 
       {/* Logo */}
-      <div style={{ marginBottom: 8, textAlign: 'center' }}>
+      <div style={{ marginBottom: 32, textAlign: 'center' }}>
         <div style={{
           fontFamily: 'var(--font-mono, monospace)', fontWeight: 900,
-          fontSize: 42, letterSpacing: '0.12em', color: '#E2622C', lineHeight: 1,
+          fontSize: 28, letterSpacing: '0.08em', color: '#E2622C', lineHeight: 1,
         }}>
-          HARDWOOD
+          YOU SABI BALL
         </div>
-        <div style={{ color: '#6B7280', fontSize: 13, marginTop: 4, letterSpacing: '0.08em' }}>
+        <div style={{ color: '#9CA3AF', fontSize: 12, marginTop: 6, letterSpacing: '0.1em', fontWeight: 600 }}>
           DRAFT · COURT · GLORY
         </div>
       </div>
 
       {/* Card */}
       <div style={{
-        background: '#1E2128', borderRadius: 16, padding: '32px 28px',
+        background: '#FFFFFF', borderRadius: 16, padding: '28px 28px',
         width: '100%', maxWidth: 420,
-        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-        marginTop: 32,
+        border: '1px solid #E5E7EB',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
       }}>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderRadius: 8, overflow: 'hidden', background: '#272B33' }}>
+        <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderRadius: 10, overflow: 'hidden', background: '#F3F4F6', padding: 4 }}>
           {(['signin', 'signup', 'guest'] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => { setTab(t); setError(null); }}
               style={{
-                flex: 1, padding: '9px 0',
-                background: tab === t ? '#E2622C' : 'transparent',
+                flex: 1, padding: '8px 0',
+                background: tab === t ? '#FFFFFF' : 'transparent',
                 border: 'none', cursor: 'pointer',
-                color: tab === t ? '#fff' : '#6B7280',
-                fontWeight: 700, fontSize: 12,
-                letterSpacing: '0.06em',
-                transition: 'background 0.15s',
+                color: tab === t ? '#111827' : '#6B7280',
+                fontWeight: tab === t ? 700 : 600,
+                fontSize: 12, letterSpacing: '0.06em',
+                borderRadius: 8,
+                boxShadow: tab === t ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                transition: 'all 0.15s',
               }}
             >
               {t === 'signin' ? 'SIGN IN' : t === 'signup' ? 'SIGN UP' : 'GUEST'}
@@ -129,7 +131,7 @@ export default function RegisterScreen() {
             />
 
             {error && (
-              <div style={{ color: '#F87171', fontSize: 12, marginTop: 8, textAlign: 'center' }}>
+              <div style={{ color: '#DC2626', fontSize: 12, marginTop: 8, textAlign: 'center' }}>
                 {error}
               </div>
             )}
@@ -141,9 +143,9 @@ export default function RegisterScreen() {
               disabled={loading || !email.trim() || !password}
               style={{
                 ...ctaBtn,
-                background: loading || !email.trim() || !password ? '#3A3F4A' : '#E2622C',
-                color:      loading || !email.trim() || !password ? '#6B7280' : '#fff',
-                cursor:     loading || !email.trim() || !password ? 'default' : 'pointer',
+                background: loading || !email.trim() || !password ? '#E5E7EB' : '#E2622C',
+                color:      loading || !email.trim() || !password ? '#9CA3AF' : '#fff',
+                cursor:     loading || !email.trim() || !password ? 'default'  : 'pointer',
                 marginTop: 20,
               }}
             >
@@ -155,8 +157,8 @@ export default function RegisterScreen() {
         {/* Guest mode */}
         {tab === 'guest' && (
           <>
-            <p style={{ color: '#9CA1AC', fontSize: 13, marginTop: 0, marginBottom: 16, lineHeight: 1.5 }}>
-              Play offline — your progress is saved in this browser only.
+            <p style={{ color: '#6B7280', fontSize: 13, marginTop: 0, marginBottom: 16, lineHeight: 1.6 }}>
+              Play offline — progress saved in this browser only.
               Sign up any time to unlock cloud saves and the global leaderboard.
             </p>
             <input
@@ -176,8 +178,8 @@ export default function RegisterScreen() {
               disabled={!nameInput.trim()}
               style={{
                 ...ctaBtn,
-                background: nameInput.trim() ? '#7A3FF2' : '#3A3F4A',
-                color:      nameInput.trim() ? '#fff'    : '#6B7280',
+                background: nameInput.trim() ? '#7A3FF2' : '#E5E7EB',
+                color:      nameInput.trim() ? '#fff'    : '#9CA3AF',
                 cursor:     nameInput.trim() ? 'pointer' : 'default',
                 marginTop: 20,
               }}
@@ -185,10 +187,9 @@ export default function RegisterScreen() {
               PLAY AS GUEST
             </button>
 
-            {/* Returning guest profiles */}
             {profiles.length > 0 && (
               <div style={{ marginTop: 20 }}>
-                <div style={{ color: '#6B7280', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 10, textAlign: 'center' }}>
+                <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 10, textAlign: 'center' }}>
                   RECENT
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
@@ -197,9 +198,9 @@ export default function RegisterScreen() {
                       key={p}
                       onClick={() => pickProfile(p)}
                       style={{
-                        background: '#272B33', border: '1px solid #3A3F4A',
+                        background: '#F3F4F6', border: '1px solid #E5E7EB',
                         borderRadius: 20, padding: '6px 14px',
-                        color: '#9CA1AC', fontSize: 12, fontWeight: 600,
+                        color: '#374151', fontSize: 12, fontWeight: 600,
                         cursor: 'pointer',
                       }}
                     >
@@ -224,7 +225,7 @@ function DifficultyPicker({
 }) {
   return (
     <div style={{ marginTop: 20 }}>
-      <div style={{ color: '#9CA1AC', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 10 }}>
+      <div style={{ color: '#6B7280', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 10 }}>
         DIFFICULTY
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -234,15 +235,15 @@ function DifficultyPicker({
             onClick={() => setDiff(d)}
             style={{
               textAlign: 'left', padding: '10px 14px',
-              background:   difficulty === d ? '#2C2060' : '#272B33',
-              border:       `1.5px solid ${difficulty === d ? '#7A3FF2' : '#3A3F4A'}`,
+              background:   difficulty === d ? '#F5F3FF' : '#F9FAFB',
+              border:       `1.5px solid ${difficulty === d ? '#7A3FF2' : '#E5E7EB'}`,
               borderRadius: 8, cursor: 'pointer',
             }}
           >
-            <div style={{ color: difficulty === d ? '#A97CF8' : '#F4F5F7', fontWeight: 700, fontSize: 13 }}>
+            <div style={{ color: difficulty === d ? '#7A3FF2' : '#374151', fontWeight: 700, fontSize: 13 }}>
               {d}
             </div>
-            <div style={{ color: '#6B7280', fontSize: 11, marginTop: 2 }}>
+            <div style={{ color: '#9CA3AF', fontSize: 11, marginTop: 2 }}>
               {DIFF_DESC[d]}
             </div>
           </button>
@@ -254,8 +255,8 @@ function DifficultyPicker({
 
 const inputStyle: React.CSSProperties = {
   display: 'block', width: '100%', padding: '12px 14px',
-  background: '#272B33', border: '1.5px solid #3A3F4A',
-  borderRadius: 8, color: '#F4F5F7',
+  background: '#F9FAFB', border: '1.5px solid #E5E7EB',
+  borderRadius: 8, color: '#111827',
   fontSize: 15, outline: 'none', boxSizing: 'border-box',
 };
 

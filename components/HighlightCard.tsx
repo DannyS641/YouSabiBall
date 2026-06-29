@@ -24,8 +24,8 @@ export default function HighlightCard() {
 
   function handleShare() {
     const text = isChamp
-      ? `🏆 I just won the NBA Championship in HARDWOOD as ${userName}! Finals MVP: ${mvp} — ${runLabel}`
-      : `🏀 I went ${runLabel} in HARDWOOD. Earned +${fmt(pointsEarned)} pts & +${fmt(coinsEarned)} 🪙`;
+      ? `🏆 I just won the NBA Championship in YOU SABI BALL as ${userName}! Finals MVP: ${mvp} — ${runLabel}`
+      : `🏀 I went ${runLabel} in YOU SABI BALL. Earned +${fmt(pointsEarned)} pts & +${fmt(coinsEarned)} 🪙`;
     if (typeof navigator !== 'undefined' && navigator.share) {
       navigator.share({ text }).catch(() => { /* user cancelled */ });
     } else if (typeof navigator !== 'undefined' && navigator.clipboard) {

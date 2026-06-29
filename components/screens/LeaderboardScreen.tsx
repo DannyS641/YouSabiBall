@@ -1,6 +1,7 @@
 'use client';
 
 import { useGameStore, getLeaderboardRows } from '@/store/gameStore';
+import { useBreakpoint } from '@/hooks/useBreakpoint';
 
 const FINISH_LABELS = ['—', 'Conf Semis', 'Conf Finals', 'Finals', 'Champion'];
 
@@ -8,6 +9,7 @@ export default function LeaderboardScreen() {
   const leaderboard = useGameStore(s => s.leaderboard);
   const userName    = useGameStore(s => s.userName);
   const goHome      = useGameStore(s => s.goHome);
+  const { isMobile } = useBreakpoint();
 
   const rows = getLeaderboardRows(leaderboard, userName);
 
@@ -42,18 +44,16 @@ export default function LeaderboardScreen() {
         {/* Column headers */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '44px 1fr 90px 80px 70px 90px',
-          gap: 0,
-          padding: '10px 20px',
-          background: '#F9FAFB',
-          borderBottom: '1px solid #E5E7EB',
+          gridTemplateColumns: isMobile ? '36px 1fr 44px 80px' : '44px 1fr 90px 80px 70px 90px',
+          gap: 0, padding: isMobile ? '10px 14px' : '10px 20px',
+          background: '#F9FAFB', borderBottom: '1px solid #E5E7EB',
           color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
         }}>
           <div>#</div>
           <div>GM</div>
-          <div style={{ textAlign: 'right' }}>BEST</div>
+          {!isMobile && <div style={{ textAlign: 'right' }}>BEST</div>}
           <div style={{ textAlign: 'center' }}>🏆</div>
-          <div style={{ textAlign: 'right' }}>GP</div>
+          {!isMobile && <div style={{ textAlign: 'right' }}>GP</div>}
           <div style={{ textAlign: 'right' }}>POINTS</div>
         </div>
 
@@ -63,9 +63,9 @@ export default function LeaderboardScreen() {
             key={row.name}
             style={{
               display: 'grid',
-              gridTemplateColumns: '44px 1fr 90px 80px 70px 90px',
+              gridTemplateColumns: isMobile ? '36px 1fr 44px 80px' : '44px 1fr 90px 80px 70px 90px',
               gap: 0, alignItems: 'center',
-              padding: '14px 20px',
+              padding: isMobile ? '12px 14px' : '14px 20px',
               background: row.isYou ? '#F5F3FF' : idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA',
               borderBottom: idx < rows.length - 1 ? '1px solid #F3F4F6' : 'none',
               borderLeft: row.isYou ? '3px solid #7A3FF2' : '3px solid transparent',
@@ -112,14 +112,12 @@ export default function LeaderboardScreen() {
               </div>
             </div>
 
-            {/* Best finish */}
-            <div style={{
-              textAlign: 'right',
-              color: '#6B7280', fontSize: 12,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>
-              {row.finish}
-            </div>
+            {/* Best finish – desktop only */}
+            {!isMobile && (
+              <div style={{ textAlign: 'right', color: '#6B7280', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {row.finish}
+              </div>
+            )}
 
             {/* Titles */}
             <div style={{ textAlign: 'center' }}>
@@ -132,13 +130,12 @@ export default function LeaderboardScreen() {
               )}
             </div>
 
-            {/* Games played */}
-            <div style={{
-              textAlign: 'right',
-              color: '#9CA3AF', fontWeight: 600, fontSize: 13,
-            }}>
-              {row.games}
-            </div>
+            {/* Games played – desktop only */}
+            {!isMobile && (
+              <div style={{ textAlign: 'right', color: '#9CA3AF', fontWeight: 600, fontSize: 13 }}>
+                {row.games}
+              </div>
+            )}
 
             {/* Points */}
             <div style={{

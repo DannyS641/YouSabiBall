@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useGameStore, TIER_COLORS } from '@/store/gameStore';
+import { useBreakpoint } from '@/hooks/useBreakpoint';
 
 const TICK_MS = 120;
 
@@ -12,6 +13,7 @@ export default function LiveGameScreen() {
   const continueAG = useGameStore(s => s.continueAfterGame);
   const showHL     = useGameStore(s => s.showHighlightCard);
 
+  const { isMobile } = useBreakpoint();
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     if (!live || live.done) {
@@ -31,9 +33,9 @@ export default function LiveGameScreen() {
     <div style={{
       height: 'calc(100vh - 60px)',
       display: 'flex', flexDirection: 'column',
-      padding: '16px 24px 16px',
+      padding: isMobile ? '12px 12px' : '16px 24px',
       overflow: 'hidden',
-      gap: 14,
+      gap: isMobile ? 10 : 14,
     }}>
 
       {/* ── Score bar ── */}
@@ -54,7 +56,7 @@ export default function LiveGameScreen() {
             <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {live.aName}
             </div>
-            <div style={{ fontWeight: 900, fontSize: 52, lineHeight: 1, color: live.done ? (youWon ? live.aColor : '#4B5563') : live.aColor, transition: 'color 0.3s' }}>
+            <div style={{ fontWeight: 900, fontSize: isMobile ? 40 : 52, lineHeight: 1, color: live.done ? (youWon ? live.aColor : '#4B5563') : live.aColor, transition: 'color 0.3s' }}>
               {live.done ? live.targetA : live.scoreA}
             </div>
             {live.done && youWon && (
@@ -86,7 +88,7 @@ export default function LiveGameScreen() {
             <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {live.bName}
             </div>
-            <div style={{ fontWeight: 900, fontSize: 52, lineHeight: 1, color: live.done ? (!youWon ? live.bColor : '#4B5563') : live.bColor, transition: 'color 0.3s' }}>
+            <div style={{ fontWeight: 900, fontSize: isMobile ? 40 : 52, lineHeight: 1, color: live.done ? (!youWon ? live.bColor : '#4B5563') : live.bColor, transition: 'color 0.3s' }}>
               {live.done ? live.targetB : live.scoreB}
             </div>
             {live.done && !youWon && (
@@ -97,7 +99,13 @@ export default function LiveGameScreen() {
       </div>
 
       {/* ── Court + PBP ── */}
-      <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '1fr 300px', gap: 14 }}>
+      <div style={{
+        flex: 1, minHeight: 0,
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 300px',
+        gridTemplateRows: isMobile ? '1fr auto' : undefined,
+        gap: isMobile ? 8 : 14,
+      }}>
 
         {/* Court */}
         <div style={{

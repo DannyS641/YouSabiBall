@@ -273,6 +273,7 @@ export interface IncomingChallenge {
   targetPoints: number;
   difficulty:   string;
   expiresAt:    string;
+  status:       'pending' | 'beaten';
 }
 
 export interface OutgoingChallenge {
@@ -281,4 +282,6 @@ export interface OutgoingChallenge {
   targetPoints: number;
   difficulty:   string;
   expiresAt:    string;
+  status:       'pending' | 'beaten';
 }
+

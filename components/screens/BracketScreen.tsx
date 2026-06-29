@@ -1,23 +1,43 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useGameStore, fmt } from '@/store/gameStore';
 import BracketTree from '@/components/BracketTree';
 
 export default function BracketScreen() {
-  const bracket        = useGameStore(s => s.bracket);
-  const simStep        = useGameStore(s => s.simStep);
-  const champion       = useGameStore(s => s.champion);
-  const mvp            = useGameStore(s => s.mvp);
-  const pointsEarned   = useGameStore(s => s.pointsEarned);
-  const coinsEarned    = useGameStore(s => s.coinsEarned);
-  const runLabel       = useGameStore(s => s.runLabel);
-  const simNext        = useGameStore(s => s.simNext);
-  const simAll         = useGameStore(s => s.simAll);
-  const playRound      = useGameStore(s => s.playRound);
-  const startNewRun    = useGameStore(s => s.startNewRun);
+  const bracket           = useGameStore(s => s.bracket);
+  const simStep           = useGameStore(s => s.simStep);
+  const champion          = useGameStore(s => s.champion);
+  const mvp               = useGameStore(s => s.mvp);
+  const pointsEarned      = useGameStore(s => s.pointsEarned);
+  const coinsEarned       = useGameStore(s => s.coinsEarned);
+  const runLabel          = useGameStore(s => s.runLabel);
+  const simNext           = useGameStore(s => s.simNext);
+  const simAll            = useGameStore(s => s.simAll);
+  const playRound         = useGameStore(s => s.playRound);
+  const startNewRun       = useGameStore(s => s.startNewRun);
   const showHighlightCard = useGameStore(s => s.showHighlightCard);
 
+  const [showChampionPopup, setShowChampionPopup] = useState(false);
+
   const done = simStep >= 4;
+
+  // When run ends, show champion popup first; highlight card follows on dismiss
+  useEffect(() => {
+    if (done) setShowChampionPopup(true);
+  }, [done]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function dismissChampionPopup() {
+    setShowChampionPopup(false);
+    showHighlightCard();
+  }
+
+  // Derive Finals score
+  const finalsResult = bracket?.finals?.result ?? null;
+  const humanIsA     = bracket?.finals?.a?.isHuman ?? false;
+  const finalsScoreH = finalsResult ? (humanIsA ? finalsResult.sa : finalsResult.sb) : null;
+  const finalsScoreO = finalsResult ? (humanIsA ? finalsResult.sb : finalsResult.sa) : null;
+  const opponentName = humanIsA ? bracket?.finals?.b?.name : bracket?.finals?.a?.name;
 
   let humanConf: string | null = null;
   let humanSeed: number | null = null;
@@ -27,109 +47,210 @@ export default function BracketScreen() {
   }
 
   return (
-    <div style={{
-      height: 'calc(100vh - 60px)',
-      display: 'flex', flexDirection: 'column',
-      padding: '20px 24px 20px',
-      overflow: 'hidden',
-    }}>
+    <>
+      {/* ── Champion announcement popup ── */}
+      {showChampionPopup && done && champion && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 300,
+            background: 'rgba(0,0,0,0.75)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24,
+          }}
+          onClick={dismissChampionPopup}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 420, borderRadius: 20,
+              background: champion.isHuman
+                ? 'linear-gradient(145deg, #1a0533 0%, #2e0f5e 50%, #1a0533 100%)'
+                : '#1E2128',
+              border: `2px solid ${champion.isHuman ? '#E0A93B' : '#374151'}`,
+              padding: '36px 28px 28px',
+              boxShadow: champion.isHuman
+                ? '0 0 60px #E0A93B44, 0 0 120px #7A3FF222'
+                : '0 20px 60px rgba(0,0,0,0.5)',
+              textAlign: 'center',
+              animation: 'popIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both',
+            }}
+          >
+            {/* Trophy */}
+            <div style={{ fontSize: 72, lineHeight: 1, marginBottom: 16 }}>🏆</div>
 
-      {/* ── Header row ── */}
-      <div style={{
-        flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 16,
-      }}>
-        <div>
-          {humanConf && humanSeed && (
+            {/* "{Team} Wins" headline */}
             <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              background: '#F5F3FF', borderRadius: 20,
-              padding: '4px 12px', marginBottom: 6,
+              color: '#FFFFFF', fontWeight: 900,
+              fontSize: 28, lineHeight: 1.1, marginBottom: 8,
             }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#7A3FF2' }} />
-              <span style={{ color: '#7A3FF2', fontSize: 11, fontWeight: 800, letterSpacing: '0.08em' }}>
-                PRO · YOU ARE THE {humanConf.toUpperCase()} {humanSeed} SEED
-              </span>
+              {champion.name} Wins
             </div>
-          )}
-          <div style={{ color: '#111827', fontWeight: 800, fontSize: 24 }}>NBA Playoffs</div>
-        </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          {!done ? (
-            <>
-              <button onClick={simAll}   style={ghostBtn}>Sim to Finals</button>
-              <button onClick={simNext}  style={ghostBtn}>Quick sim</button>
-              <button onClick={playRound} style={primaryBtn}>▶ Watch my game</button>
-            </>
-          ) : (
-            <>
-              <button onClick={showHighlightCard} style={ghostBtn}>Highlight Card</button>
-              <button onClick={startNewRun} style={primaryBtn}>New Run</button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* ── Champion banner ── */}
-      {done && champion?.isHuman && (
-        <div style={{
-          flexShrink: 0,
-          background: 'linear-gradient(135deg, #7A3FF2 0%, #4C1D95 100%)',
-          borderRadius: 14, padding: '18px 24px', marginBottom: 14,
-          display: 'flex', alignItems: 'center', gap: 18,
-        }}>
-          <div style={{ fontSize: 40 }}>🏆</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ color: '#DDD6FE', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 2 }}>
-              YOU ARE NBA CHAMPION
+            {/* Sub-line: score */}
+            <div style={{ color: champion.isHuman ? '#DDD6FE' : '#9CA3AF', fontSize: 14, marginBottom: 20 }}>
+              {opponentName && `def. ${opponentName}`}
+              {finalsScoreH !== null && (
+                <span style={{
+                  fontWeight: 800, marginLeft: 8,
+                  color: champion.isHuman ? '#E0A93B' : '#F87171',
+                }}>
+                  {champion.isHuman ? `${finalsScoreH}–${finalsScoreO}` : `${finalsScoreO}–${finalsScoreH}`}
+                </span>
+              )}
             </div>
-            <div style={{ color: '#fff', fontWeight: 900, fontSize: 24 }}>{champion.name}</div>
-            {mvp && <div style={{ color: '#C4B5FD', fontSize: 12, marginTop: 2 }}>Finals MVP: {mvp}</div>}
-          </div>
-          <div style={{ display: 'flex', gap: 20 }}>
-            <EarnStat label="POINTS" value={`+${fmt(pointsEarned)}`} color="#DDD6FE" />
-            <EarnStat label="COINS"  value={`+${fmt(coinsEarned)}`}  color="#FDE68A" />
+
+            {/* MVP */}
+            {mvp && (
+              <div style={{
+                background: 'rgba(255,255,255,0.06)',
+                borderRadius: 10, padding: '10px 14px', marginBottom: 20,
+              }}>
+                <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em' }}>
+                  FINALS MVP
+                </div>
+                <div style={{ color: '#F4F5F7', fontWeight: 700, fontSize: 16, marginTop: 4 }}>
+                  {mvp}
+                </div>
+              </div>
+            )}
+
+            {/* Earnings (human champ only) */}
+            {champion.isHuman && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 32, marginBottom: 24 }}>
+                <div>
+                  <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em' }}>POINTS</div>
+                  <div style={{ color: '#DDD6FE', fontWeight: 900, fontSize: 22 }}>+{fmt(pointsEarned)}</div>
+                </div>
+                <div>
+                  <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em' }}>COINS</div>
+                  <div style={{ color: '#FDE68A', fontWeight: 900, fontSize: 22 }}>+{fmt(coinsEarned)}</div>
+                </div>
+              </div>
+            )}
+
+            {/* CTA */}
+            <button
+              onClick={dismissChampionPopup}
+              style={{
+                width: '100%', padding: '14px 0',
+                background: champion.isHuman ? '#E0A93B' : '#374151',
+                border: 'none', borderRadius: 12,
+                color: champion.isHuman ? '#1a0533' : '#F4F5F7',
+                fontWeight: 900, fontSize: 15, letterSpacing: '0.06em',
+                cursor: 'pointer',
+              }}
+            >
+              {champion.isHuman ? 'VIEW HIGHLIGHT CARD →' : 'SEE HIGHLIGHT CARD →'}
+            </button>
           </div>
         </div>
       )}
 
-      {/* ── Non-champion result ── */}
-      {done && !champion?.isHuman && runLabel && (
+      {/* ── Main screen ── */}
+      <div style={{
+        height: 'calc(100vh - 60px)',
+        display: 'flex', flexDirection: 'column',
+        padding: '20px 24px 20px',
+        overflow: 'hidden',
+      }}>
+
+        {/* ── Header row ── */}
         <div style={{
           flexShrink: 0,
-          background: '#fff', borderRadius: 14, padding: '14px 20px', marginBottom: 14,
-          border: '1px solid #E5E7EB',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 16,
         }}>
           <div>
-            <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 2 }}>
-              RUN COMPLETE
-            </div>
-            <div style={{ color: '#111827', fontWeight: 700, fontSize: 15 }}>{runLabel}</div>
+            {humanConf && humanSeed && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                background: '#F5F3FF', borderRadius: 20,
+                padding: '4px 12px', marginBottom: 6,
+              }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#7A3FF2' }} />
+                <span style={{ color: '#7A3FF2', fontSize: 11, fontWeight: 800, letterSpacing: '0.08em' }}>
+                  PRO · YOU ARE THE {humanConf.toUpperCase()} {humanSeed} SEED
+                </span>
+              </div>
+            )}
+            <div style={{ color: '#111827', fontWeight: 800, fontSize: 24 }}>NBA Playoffs</div>
           </div>
-          <div style={{ display: 'flex', gap: 20 }}>
-            <EarnStat label="POINTS" value={`+${fmt(pointsEarned)}`} color="#7A3FF2" />
-            <EarnStat label="COINS"  value={`+${fmt(coinsEarned)}`}  color="#92400E" />
-          </div>
-        </div>
-      )}
 
-      {/* ── Bracket card – fills remaining space ── */}
-      {bracket && (
-        <div style={{
-          flex: 1, minHeight: 0,
-          background: '#FFFFFF', borderRadius: 16,
-          padding: '20px 20px 16px',
-          border: '1px solid #E5E7EB',
-          overflow: 'hidden',
-          display: 'flex', flexDirection: 'column', justifyContent: 'center',
-        }}>
-          <BracketTree bracket={bracket} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            {!done ? (
+              <>
+                <button onClick={simAll}    style={ghostBtn}>Sim to Finals</button>
+                <button onClick={simNext}   style={ghostBtn}>Quick sim</button>
+                <button onClick={playRound} style={primaryBtn}>▶ Watch my game</button>
+              </>
+            ) : (
+              <>
+                <button onClick={showHighlightCard} style={ghostBtn}>Highlight Card</button>
+                <button onClick={startNewRun}       style={primaryBtn}>New Run</button>
+              </>
+            )}
+          </div>
         </div>
-      )}
-    </div>
+
+        {/* ── Champion banner ── */}
+        {done && champion?.isHuman && (
+          <div style={{
+            flexShrink: 0,
+            background: 'linear-gradient(135deg, #7A3FF2 0%, #4C1D95 100%)',
+            borderRadius: 14, padding: '18px 24px', marginBottom: 14,
+            display: 'flex', alignItems: 'center', gap: 18,
+          }}>
+            <div style={{ fontSize: 40 }}>🏆</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ color: '#DDD6FE', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 2 }}>
+                YOU ARE NBA CHAMPION
+              </div>
+              <div style={{ color: '#fff', fontWeight: 900, fontSize: 24 }}>{champion.name}</div>
+              {mvp && <div style={{ color: '#C4B5FD', fontSize: 12, marginTop: 2 }}>Finals MVP: {mvp}</div>}
+            </div>
+            <div style={{ display: 'flex', gap: 20 }}>
+              <EarnStat label="POINTS" value={`+${fmt(pointsEarned)}`} color="#DDD6FE" />
+              <EarnStat label="COINS"  value={`+${fmt(coinsEarned)}`}  color="#FDE68A" />
+            </div>
+          </div>
+        )}
+
+        {/* ── Non-champion result ── */}
+        {done && !champion?.isHuman && runLabel && (
+          <div style={{
+            flexShrink: 0,
+            background: '#fff', borderRadius: 14, padding: '14px 20px', marginBottom: 14,
+            border: '1px solid #E5E7EB',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <div>
+              <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 2 }}>
+                RUN COMPLETE
+              </div>
+              <div style={{ color: '#111827', fontWeight: 700, fontSize: 15 }}>{runLabel}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 20 }}>
+              <EarnStat label="POINTS" value={`+${fmt(pointsEarned)}`} color="#7A3FF2" />
+              <EarnStat label="COINS"  value={`+${fmt(coinsEarned)}`}  color="#92400E" />
+            </div>
+          </div>
+        )}
+
+        {/* ── Bracket card – fills remaining space ── */}
+        {bracket && (
+          <div style={{
+            flex: 1, minHeight: 0,
+            background: '#FFFFFF', borderRadius: 16,
+            padding: '20px 20px 16px',
+            border: '1px solid #E5E7EB',
+            overflow: 'hidden',
+            display: 'flex', flexDirection: 'column', justifyContent: 'center',
+          }}>
+            <BracketTree bracket={bracket} />
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 

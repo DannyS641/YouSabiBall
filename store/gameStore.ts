@@ -148,11 +148,13 @@ interface GameState {
   mpResult:    { winner: 'host' | 'guest'; hostScore: number; guestScore: number } | null;
 
   // Social (Phase 4)
-  friends:            FriendWithStats[];
-  pendingRequests:    PendingRequest[];
-  incomingChallenges: IncomingChallenge[];
-  outgoingChallenges: OutgoingChallenge[];
-  friendsLoading:     boolean;
+  friends:              FriendWithStats[];
+  pendingRequests:      PendingRequest[];
+  incomingChallenges:   IncomingChallenge[];
+  outgoingChallenges:   OutgoingChallenge[];
+  friendsLoading:       boolean;
+  activeChallengeId:    string | null;
+  activeChallengeTarget: number | null;
 
   // Public actions
   init:               () => void;
@@ -176,6 +178,7 @@ interface GameState {
   spinCard:           () => void;
   closeToast:          () => void;
   goHome:              () => void;
+  logout:              () => void;
   viewLeaderboard:     () => void;
   viewChallenges:      () => void;
   claimSeasonLevel:    (level: number) => void;
@@ -187,6 +190,7 @@ interface GameState {
   setShareCopied:      (v: boolean) => void;
   viewFriends:         () => void;
   loadFriends:         () => Promise<void>;
+  startChallenge:      (challengeId: string, target: number) => void;
 
   // Internal helpers (called within other actions via get())
   _endGame:   () => void;
@@ -211,6 +215,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   challengeAward: null,
   mpRoomId: null, mpRole: null, mpOpponent: null, mpResult: null,
   friends: [], pendingRequests: [], incomingChallenges: [], outgoingChallenges: [], friendsLoading: false,
+  activeChallengeId: null, activeChallengeTarget: null,
 
   // ── Init ────────────────────────────────────────────────────────────────────
   init: () => set({ leaderboard: loadLB(), profiles: loadProfiles() }),
@@ -245,6 +250,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     spinning: false, lastPick: null,
     bracket: null, simStep: 0, champion: null, mvp: '',
     pointsEarned: 0, coinsEarned: 0, runLabel: '', live: null, _recorded: false,
+    activeChallengeId: null, activeChallengeTarget: null,
     phase: 'draft',
   }),
 
@@ -375,7 +381,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       _liveMatch: m,
       live: {
         aName: human.name, bName: opp.name,
-        aColor: human.color ?? '#7A3FF2', bColor: '#16181D',
+        aColor: human.color ?? '#7A3FF2', bColor: opp.color ?? '#E2622C',
         scoreA: 0, scoreB: 0,
         targetA: d.sa, targetB: d.sb,
         idx: 0, total: events.length,
@@ -494,7 +500,33 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   closeToast:         () => set({ claimToast: null, badgeToast: [] }),
   goHome:             () => set({ phase: 'home', claimToast: null, badgeToast: [] }),
-  viewLeaderboard:    () => set(s => ({ prevPhase: s.phase, phase: 'leaderboard' })),
+  logout:             () => set({
+    phase: 'register', authUser: null,
+    userName: '', save: null, nameInput: '',
+    roster: emptyRoster(), available: [...PLAYERS], reelItems: [],
+    bracket: null, simStep: 0, champion: null, mvp: '',
+    pointsEarned: 0, coinsEarned: 0, runLabel: '', live: null, _recorded: false,
+    claimToast: null, badgeToast: [], friends: [], pendingRequests: [],
+    incomingChallenges: [], outgoingChallenges: [],
+  }),
+  viewLeaderboard: () => {
+    const userName = get().userName;
+    set(s => ({ prevPhase: s.phase, phase: 'leaderboard' }));
+    fetchLeaderboard().then(rows => {
+      if (!rows.length) return;
+      const cloudLb: LbEntry[] = rows.map(r => ({
+        name:      r.display_name,
+        points:    r.total_points,
+        titles:    r.titles,
+        games:     r.games,
+        bestRound: r.best_round,
+        isYou:     r.display_name === userName,
+      }));
+      cloudLb.sort((a, b) => b.points - a.points);
+      saveLB(cloudLb);
+      set({ leaderboard: cloudLb });
+    }).catch(() => {});
+  },
   viewChallenges:     () => set(s => ({ prevPhase: s.phase, phase: 'challenges' })),
   enterLobby:         () => set(s => ({ prevPhase: s.phase, phase: 'lobby', mpRoomId: null, mpRole: null, mpOpponent: null, mpResult: null })),
   setMpRoom:          (id, role, opponent) => set({ mpRoomId: id, mpRole: role, mpOpponent: opponent, phase: 'mp_room' }),
@@ -510,6 +542,16 @@ export const useGameStore = create<GameState>((set, get) => ({
   closeHighlightCard: () => set({ showHighlight: false }),
   setShareCopied:     v  => set({ shareCopied: v }),
   viewFriends: () => set(s => ({ prevPhase: s.phase, phase: 'friends' })),
+
+  startChallenge: (challengeId, target) => set({
+    activeChallengeId: challengeId, activeChallengeTarget: target,
+    roster: emptyRoster(), available: [...PLAYERS], reelItems: [],
+    spinning: false, lastPick: null,
+    bracket: null, simStep: 0, champion: null, mvp: '',
+    pointsEarned: 0, coinsEarned: 0, runLabel: '', live: null, _recorded: false,
+    phase: 'draft',
+  }),
+
   loadFriends: async () => {
     const { authUser } = get();
     if (!authUser) return;
@@ -605,6 +647,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       challengeAward: ca.completedIds.length ? ca : null,
       _recorded:      true,
     });
+
+    // Auto-complete active duel challenge if target beaten
+    const { activeChallengeId, activeChallengeTarget } = get();
+    if (activeChallengeId && activeChallengeTarget !== null && entry.points >= activeChallengeTarget) {
+      import('@/app/actions/social').then(({ markChallengeBeat }) => {
+        markChallengeBeat(activeChallengeId, entry.points).catch(() => {});
+      });
+      set({ activeChallengeId: null, activeChallengeTarget: null });
+    }
 
     // Fire-and-forget server action when authenticated — server re-validates score
     if (get().authUser) {
@@ -730,7 +781,7 @@ export function getFriendsBadgeCount(
   pendingRequests: PendingRequest[],
   incomingChallenges: IncomingChallenge[],
 ): number {
-  return pendingRequests.length + incomingChallenges.length;
+  return pendingRequests.length + incomingChallenges.filter(c => c.status === 'pending').length;
 }
 
 export { POS_COLORS, POS_SPOT_HALF, TIER_COLORS, fmt, initials };

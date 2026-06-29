@@ -115,9 +115,9 @@ export async function getFriends(): Promise<{ ok: boolean; friends: FriendWithSt
   if (friendIds.length) {
     const { data: lb } = await supabase
       .from('leaderboard')
-      .select('user_id, points, titles, games')
+      .select('user_id, total_points, titles, games')
       .in('user_id', friendIds);
-    statsMap = Object.fromEntries((lb ?? []).map(r => [r.user_id, r]));
+    statsMap = Object.fromEntries((lb ?? []).map(r => [r.user_id, { points: r.total_points, titles: r.titles, games: r.games }]));
   }
 
   return {
@@ -186,7 +186,7 @@ export async function getDirectChallenges(): Promise<{
       challengee:profiles!direct_challenges_challengee_id_fkey(id, display_name)
     `)
     .or(`challenger_id.eq.${user.id},challengee_id.eq.${user.id}`)
-    .eq('status', 'pending')
+    .in('status', ['pending', 'beaten'])
     .order('expires_at', { ascending: true });
 
   const rows = data ?? [];
@@ -202,6 +202,7 @@ export async function getDirectChallenges(): Promise<{
       targetPoints: r.target_points,
       difficulty:   r.difficulty,
       expiresAt:    r.expires_at,
+      status:       r.status as 'pending' | 'beaten',
     }));
 
   const outgoing: OutgoingChallenge[] = rows
@@ -212,6 +213,7 @@ export async function getDirectChallenges(): Promise<{
       targetPoints: r.target_points,
       difficulty:   r.difficulty,
       expiresAt:    r.expires_at,
+      status:       r.status as 'pending' | 'beaten',
     }));
 
   return { ok: true, incoming, outgoing };

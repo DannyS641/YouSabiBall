@@ -15,17 +15,17 @@ import type { SearchProfile } from '@/lib/types';
 type Tab = 'friends' | 'challenges' | 'add';
 
 export default function FriendsScreen() {
-  const authUser          = useGameStore(s => s.authUser);
-  const save              = useGameStore(s => s.save);
-  const friends           = useGameStore(s => s.friends);
-  const pendingRequests   = useGameStore(s => s.pendingRequests);
+  const authUser           = useGameStore(s => s.authUser);
+  const save               = useGameStore(s => s.save);
+  const friends            = useGameStore(s => s.friends);
+  const pendingRequests    = useGameStore(s => s.pendingRequests);
   const incomingChallenges = useGameStore(s => s.incomingChallenges);
   const outgoingChallenges = useGameStore(s => s.outgoingChallenges);
-  const friendsLoading    = useGameStore(s => s.friendsLoading);
-  const loadFriends       = useGameStore(s => s.loadFriends);
-  const goHome            = useGameStore(s => s.goHome);
-  const difficulty        = useGameStore(s => s.difficulty);
-  const pointsEarned      = useGameStore(s => s.save?.stats.points ?? 0);
+  const friendsLoading     = useGameStore(s => s.friendsLoading);
+  const loadFriends        = useGameStore(s => s.loadFriends);
+  const goHome             = useGameStore(s => s.goHome);
+  const difficulty         = useGameStore(s => s.difficulty);
+  const startChallenge     = useGameStore(s => s.startChallenge);
 
   const [tab, setTab] = useState<Tab>('friends');
   const [searchQuery, setSearchQuery] = useState('');
@@ -38,8 +38,11 @@ export default function FriendsScreen() {
 
   useEffect(() => { loadFriends(); }, [loadFriends]);
 
-  // Auto-switch to challenges tab when there are incoming
-  const badgeCount = pendingRequests.length + incomingChallenges.length;
+  const pendingIncoming   = incomingChallenges.filter(c => c.status === 'pending');
+  const completedIncoming = incomingChallenges.filter(c => c.status === 'beaten');
+  const completedOutgoing = outgoingChallenges.filter(c => c.status === 'beaten');
+  const pendingOutgoing   = outgoingChallenges.filter(c => c.status === 'pending');
+  const badgeCount        = pendingRequests.length + pendingIncoming.length;
 
   function flash(msg: string) {
     setActionMsg(msg);
@@ -199,8 +202,11 @@ export default function FriendsScreen() {
                     marginTop: 12, padding: '12px 14px',
                     background: '#F5F3FF', borderRadius: 10, border: '1px solid #DDD6FE',
                   }}>
-                    <div style={{ color: '#4C1D95', fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
-                      Challenge {f.name} to beat your best score of <strong>{fmt(save?.stats.points ?? 0)}</strong> pts on <strong>{difficulty}</strong>?
+                    <div style={{ color: '#4C1D95', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                      Dare {f.name} to surpass your career score
+                    </div>
+                    <div style={{ color: '#6B7280', fontSize: 12, marginBottom: 10 }}>
+                      They must reach <strong>{fmt(save?.stats.points ?? 0)} pts</strong> total on <strong>{difficulty}</strong>. Expires in 7 days.
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button onClick={() => handleChallenge(f.id)} disabled={isPending} style={primaryBtn}>
@@ -241,48 +247,44 @@ export default function FriendsScreen() {
               </Section>
             )}
 
-            {/* Incoming score challenges */}
-            {incomingChallenges.length > 0 && (
+            {/* Pending incoming challenges */}
+            {pendingIncoming.length > 0 && (
               <Section label="Incoming Challenges">
-                {incomingChallenges.map(c => (
+                {pendingIncoming.map(c => (
                   <div key={c.id} style={{ ...card, border: '1.5px solid #FDE68A', background: '#FFFBEB' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                      <div style={{ fontSize: 28 }}>🏆</div>
+                      <div style={{ fontSize: 28 }}>⚡</div>
                       <div style={{ flex: 1 }}>
                         <div style={{ color: '#111827', fontWeight: 700, fontSize: 14 }}>
                           {c.from} challenged you!
                         </div>
                         <div style={{ color: '#6B7280', fontSize: 13, marginTop: 3 }}>
-                          Beat <strong>{fmt(c.targetPoints)}</strong> pts on <strong>{c.difficulty}</strong>
+                          Reach <strong>{fmt(c.targetPoints)} pts</strong> total on <strong>{c.difficulty}</strong>
                         </div>
                         <div style={{ color: '#9CA3AF', fontSize: 11, marginTop: 2 }}>
-                          Expires {new Date(c.expiresAt).toLocaleDateString()}
+                          Your score: {fmt(save?.stats.points ?? 0)} pts · Expires {new Date(c.expiresAt).toLocaleDateString()}
                         </div>
                       </div>
-                      <button onClick={goHome} style={primaryBtn}>Play now</button>
+                      <button onClick={() => startChallenge(c.id, c.targetPoints)} style={primaryBtn}>
+                        Accept &amp; Play
+                      </button>
                     </div>
                   </div>
                 ))}
               </Section>
             )}
 
-            {/* Outgoing challenges */}
-            {outgoingChallenges.length > 0 && (
+            {/* Pending outgoing challenges */}
+            {pendingOutgoing.length > 0 && (
               <Section label="Sent Challenges">
-                {outgoingChallenges.map(c => (
+                {pendingOutgoing.map(c => (
                   <div key={c.id} style={card}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <div style={{ fontSize: 24 }}>⏳</div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ color: '#111827', fontWeight: 600, fontSize: 14 }}>
-                          You challenged {c.to}
-                        </div>
-                        <div style={{ color: '#6B7280', fontSize: 13, marginTop: 2 }}>
-                          {fmt(c.targetPoints)} pts · {c.difficulty}
-                        </div>
-                      </div>
-                      <div style={{ color: '#9CA3AF', fontSize: 11 }}>
-                        Exp. {new Date(c.expiresAt).toLocaleDateString()}
+                        <div style={{ color: '#111827', fontWeight: 600, fontSize: 14 }}>You challenged {c.to}</div>
+                        <div style={{ color: '#6B7280', fontSize: 13, marginTop: 2 }}>Target: {fmt(c.targetPoints)} pts on {c.difficulty}</div>
+                        <div style={{ color: '#9CA3AF', fontSize: 11, marginTop: 2 }}>Exp. {new Date(c.expiresAt).toLocaleDateString()}</div>
                       </div>
                     </div>
                   </div>
@@ -290,7 +292,36 @@ export default function FriendsScreen() {
               </Section>
             )}
 
-            {pendingRequests.length === 0 && incomingChallenges.length === 0 && outgoingChallenges.length === 0 && (
+            {/* Completed challenges */}
+            {(completedIncoming.length > 0 || completedOutgoing.length > 0) && (
+              <Section label="Completed">
+                {completedIncoming.map(c => (
+                  <div key={c.id} style={{ ...card, border: '1px solid #86EFAC', background: '#F0FDF4' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ fontSize: 24 }}>✅</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ color: '#166534', fontWeight: 700, fontSize: 14 }}>You beat {c.from}'s challenge!</div>
+                        <div style={{ color: '#6B7280', fontSize: 12, marginTop: 2 }}>{fmt(c.targetPoints)} pts target · {c.difficulty}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {completedOutgoing.map(c => (
+                  <div key={c.id} style={{ ...card, border: '1px solid #86EFAC', background: '#F0FDF4' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ fontSize: 24 }}>🏅</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ color: '#166534', fontWeight: 700, fontSize: 14 }}>{c.to} beat your challenge!</div>
+                        <div style={{ color: '#6B7280', fontSize: 12, marginTop: 2 }}>{fmt(c.targetPoints)} pts target · {c.difficulty}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </Section>
+            )}
+
+            {pendingRequests.length === 0 && pendingIncoming.length === 0 && pendingOutgoing.length === 0
+              && completedIncoming.length === 0 && completedOutgoing.length === 0 && (
               <div style={emptyCard}>
                 <div style={{ fontSize: 36, marginBottom: 8 }}>🏅</div>
                 <div style={{ color: '#374151', fontWeight: 700, fontSize: 16 }}>No active challenges</div>

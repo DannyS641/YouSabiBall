@@ -17,7 +17,7 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'HARDWOOD — Draft · Court · Glory',
+  title: 'YOU SABI BALL — Draft · Court · Glory',
   description: 'Draft five NBA stars, run the playoffs, chase the title.',
 };
 

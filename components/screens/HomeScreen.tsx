@@ -2,6 +2,7 @@
 
 import { useGameStore, getStreakData, fmtCoins, getWorldRank, getBadgesCount } from '@/store/gameStore';
 import { BADGES, TIER_COLORS } from '@/lib/sim';
+import { useBreakpoint } from '@/hooks/useBreakpoint';
 import type { Tier } from '@/lib/types';
 
 export default function HomeScreen() {
@@ -13,6 +14,8 @@ export default function HomeScreen() {
   const startRun    = useGameStore(s => s.startNewRun);
   const claimStreak = useGameStore(s => s.claimStreak);
   const enterLobby  = useGameStore(s => s.enterLobby);
+
+  const { isMobile, isTablet } = useBreakpoint();
 
   if (!save) return null;
 
@@ -26,58 +29,65 @@ export default function HomeScreen() {
   };
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 24px 60px' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '20px 16px 60px' : '28px 24px 60px' }}>
 
       {/* Profile header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          {/* Avatar */}
+      <div style={{
+        display: 'flex', alignItems: isMobile ? 'flex-start' : 'center',
+        justifyContent: 'space-between', marginBottom: 20, gap: 12,
+        flexWrap: isMobile ? 'wrap' : 'nowrap',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{
-            width: 64, height: 64, borderRadius: 14,
-            background: '#7A3FF2',
+            width: isMobile ? 52 : 64, height: isMobile ? 52 : 64, borderRadius: 14,
+            background: 'linear-gradient(135deg, #7A3FF2, #4C1D95)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontWeight: 900, fontSize: 26, flexShrink: 0,
+            color: '#fff', fontWeight: 900, fontSize: isMobile ? 22 : 26, flexShrink: 0,
           }}>
             {(userName[0] || '?').toUpperCase()}
           </div>
           <div>
-            <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 4 }}>
+            <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 3 }}>
               {DIFF_LABEL[difficulty]} · GENERAL MANAGER
             </div>
-            <div style={{ color: '#111827', fontWeight: 800, fontSize: 26 }}>{userName}</div>
+            <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 20 : 26 }}>{userName}</div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button
             onClick={enterLobby}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               background: '#EDE9FE', border: 'none', borderRadius: 12,
-              padding: '12px 16px',
-              color: '#7A3FF2', fontWeight: 800, fontSize: 14,
+              padding: isMobile ? '10px 12px' : '12px 16px',
+              color: '#7A3FF2', fontWeight: 800, fontSize: isMobile ? 13 : 14,
               cursor: 'pointer',
             }}
           >
-            ⚡ Duel
+            ⚡ {isMobile ? 'Duel' : 'Duel'}
           </button>
           <button
             onClick={startRun}
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
               background: '#E2622C', border: 'none', borderRadius: 12,
-              padding: '12px 20px',
-              color: '#fff', fontWeight: 800, fontSize: 15,
+              padding: isMobile ? '10px 14px' : '12px 20px',
+              color: '#fff', fontWeight: 800, fontSize: isMobile ? 13 : 15,
               letterSpacing: '0.02em', cursor: 'pointer',
               boxShadow: '0 2px 12px rgba(226,98,44,0.3)',
             }}
           >
-            <span>▶</span> New Run
+            ▶ New Run
           </button>
         </div>
       </div>
 
       {/* Stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : isTablet ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+        gap: 10, marginBottom: 16,
+      }}>
         <StatCard label="COINS" value={fmtCoins(save)} sub="" color="#92400E" bg="#FFFBEB" />
         <StatCard
           label="WORLD RANK"
@@ -170,12 +180,16 @@ export default function HomeScreen() {
       </div>
 
       {/* Achievements */}
-      <div style={{ ...card, marginTop: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+      <div style={{ ...card, marginTop: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <div style={sectionTitle}>Achievements</div>
-          <div style={{ color: '#9CA3AF', fontSize: 13, fontWeight: 600 }}>{earned} / {badgeTotal} unlocked</div>
+          <div style={{ color: '#9CA3AF', fontSize: 13, fontWeight: 600 }}>{earned} / {badgeTotal}</div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : isTablet ? 'repeat(3, 1fr)' : 'repeat(5, 1fr)',
+          gap: 8,
+        }}>
           {BADGES.map(badge => {
             const isEarned = earnedSet.has(badge.id);
             const color = isEarned ? (TIER_COLORS[badge.tier] ?? '#6B7280') : '#D1D5DB';
