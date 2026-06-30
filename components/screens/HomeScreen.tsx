@@ -11,11 +11,12 @@ export default function HomeScreen() {
   const difficulty  = useGameStore(s => s.difficulty);
   const leaderboard = useGameStore(s => s.leaderboard);
   const lastPull    = useGameStore(s => s.lastPull);
-  const startRun      = useGameStore(s => s.startNewRun);
-  const claimStreak   = useGameStore(s => s.claimStreak);
-  const enterLobby    = useGameStore(s => s.enterLobby);
-  const viewHistory   = useGameStore(s => s.viewHistory);
-  const viewSettings  = useGameStore(s => s.viewSettings);
+  const startRun       = useGameStore(s => s.startNewRun);
+  const claimStreak    = useGameStore(s => s.claimStreak);
+  const enterLobby     = useGameStore(s => s.enterLobby);
+  const viewHistory    = useGameStore(s => s.viewHistory);
+  const viewSettings   = useGameStore(s => s.viewSettings);
+  const viewSeasonHub  = useGameStore(s => s.viewSeasonHub);
 
   const { isMobile, isTablet } = useBreakpoint();
 
@@ -67,6 +68,18 @@ export default function HomeScreen() {
             }}
           >
             ⚡ {isMobile ? 'Duel' : 'Duel'}
+          </button>
+          <button
+            onClick={viewSeasonHub}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: '#F0F9FF', border: '1.5px solid #BAE6FD', borderRadius: 12,
+              padding: isMobile ? '10px 12px' : '12px 16px',
+              color: '#0369A1', fontWeight: 800, fontSize: isMobile ? 13 : 14,
+              cursor: 'pointer',
+            }}
+          >
+            🏟️ {isMobile ? 'Season' : 'Season Mode'}
           </button>
           <button
             onClick={startRun}

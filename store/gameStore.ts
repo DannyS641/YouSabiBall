@@ -22,8 +22,18 @@ import {
   drawPerks,
   drawUpgrades,
   generateNickname,
+  buildSeasonTeams,
+  generateSchedule,
+  simulateSeason,
+  computeStandings,
+  buildPlayInFull,
+  resolvePlayIn,
+  buildPlayoffBracket,
+  simPlayoffRound,
+  buildNextRound,
+  simFullSeries,
 } from '@/lib/sim';
-import type { GameEvent, EarnedBadge, ChallengeAward, DraftTokenTier, PackType, Perk, Upgrade } from '@/lib/sim';
+import type { GameEvent, EarnedBadge, ChallengeAward, DraftTokenTier, PackType, Perk, Upgrade, SeasonLength, SeasonTeam, GameSlot, StandingsRow, PlayInBracket, PlayoffBracket, SeriesState } from '@/lib/sim';
 import { recordRunServer, syncSave, fetchLeaderboard } from '@/app/actions/game';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -38,7 +48,7 @@ const LB_KEY      = 'hardwood_lb_v2';
 const PROFILE_KEY = 'hardwood_profiles_v2';
 const SAVE_KEY    = 'hardwood_save_v1';
 
-export type Phase = 'register' | 'home' | 'draft' | 'court' | 'bracket' | 'game' | 'leaderboard' | 'challenges' | 'lobby' | 'mp_room' | 'friends' | 'history' | 'shop' | 'collection' | 'settings';
+export type Phase = 'register' | 'home' | 'draft' | 'court' | 'bracket' | 'game' | 'leaderboard' | 'challenges' | 'lobby' | 'mp_room' | 'friends' | 'history' | 'shop' | 'collection' | 'settings' | 'season_hub';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -170,6 +180,21 @@ interface GameState {
   mpOpponent:  string | null;   // opponent's display name
   mpResult:    { winner: 'host' | 'guest'; hostScore: number; guestScore: number } | null;
 
+  // Season Mode (S2+)
+  seasonLength:      SeasonLength;
+  seasonConference:  'East' | 'West';
+  seasonTeams:       SeasonTeam[];
+  seasonSchedule:    GameSlot[];
+  seasonStandings:   { east: StandingsRow[]; west: StandingsRow[] } | null;
+  seasonStatus:      'setup' | 'standings' | 'trade_window' | 'play_in' | 'playoffs';
+  seasonRoster:      Card[];
+  seasonTradesLeft:  number;
+  seasonTradeLog:    { pos: string; offered: string; received: string }[];
+  seasonTradeTarget: Position | null;
+  playInBracket:     PlayInBracket | null;
+  playInSeeds:       { east: SeasonTeam[]; west: SeasonTeam[] } | null;
+  playoffBracket:    PlayoffBracket | null;
+
   // Social (Phase 4)
   friends:              FriendWithStats[];
   pendingRequests:      PendingRequest[];
@@ -212,6 +237,18 @@ interface GameState {
   showHighlightCard:   () => void;
   closeHighlightCard:  () => void;
   setShareCopied:      (v: boolean) => void;
+  viewSeasonHub:          () => void;
+  setSeasonLength:        (l: SeasonLength) => void;
+  setSeasonConference:    (c: 'East' | 'West') => void;
+  startSeason:            () => void;
+  advanceToTradeWindow:   () => void;
+  openTradeModal:         (pos: Position) => void;
+  closeTradeModal:        () => void;
+  executeTrade:           (pos: Position, target: Card) => void;
+  skipTradeWindow:        () => void;
+  simPlayIn:              () => void;
+  advanceToPlayoffs:      () => void;
+  simNextPlayoffRound:    () => void;
   viewFriends:         () => void;
   viewHistory:         () => void;
   viewShop:            () => void;
@@ -249,6 +286,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   live: null, _events: [], _liveHuman: null, _liveOpp: null,
   _liveRound: 0, _liveMatch: null,
   _diffBias: 0, _diffMult: 1, _recorded: false,
+  seasonLength: 'standard', seasonConference: 'East',
+  seasonTeams: [], seasonSchedule: [], seasonStandings: null, seasonStatus: 'setup',
+  seasonRoster: [], seasonTradesLeft: 3, seasonTradeLog: [], seasonTradeTarget: null,
+  playInBracket: null, playInSeeds: null, playoffBracket: null,
   leaderboard: [], lastPull: null,
   claimToast: null, badgeToast: [], showHighlight: false, shareCopied: false,
   challengeAward: null,
@@ -718,6 +759,163 @@ export const useGameStore = create<GameState>((set, get) => ({
   showHighlightCard:  () => set({ showHighlight: true, shareCopied: false }),
   closeHighlightCard: () => set({ showHighlight: false }),
   setShareCopied:     v  => set({ shareCopied: v }),
+  viewSeasonHub: () => set(s => ({
+    prevPhase: s.phase, phase: 'season_hub', seasonStatus: 'setup', seasonStandings: null,
+    playInBracket: null, playInSeeds: null, playoffBracket: null,
+  })),
+
+  setSeasonLength:     (l) => set({ seasonLength: l }),
+  setSeasonConference: (c) => set({ seasonConference: c }),
+
+  startSeason: () => {
+    const { userName, save, difficulty, seasonLength, seasonConference } = get();
+    const humanOvr = Math.max(save?.stats.topOvr ?? 82, 75);
+    const diff = DIFF_SETTINGS[difficulty as keyof typeof DIFF_SETTINGS];
+    const teams = buildSeasonTeams(userName, humanOvr, seasonConference);
+    const seed = Date.now() & 0xFFFFFF;
+    const schedule = generateSchedule(teams, seasonLength, seed);
+    const { teams: simTeams, schedule: simSchedule } = simulateSeason(teams, schedule, diff.bias);
+    const standings = computeStandings(simTeams);
+
+    // Build season roster — one real player card per position near the human OVR
+    const seasonRoster: Card[] = POSITIONS.map(pos => {
+      const pool = PLAYERS.filter(p => p.pos === pos && Math.abs(p.ovr - humanOvr) <= 8);
+      const src = pool.length ? pool : PLAYERS.filter(p => p.pos === pos);
+      return src[Math.floor(Math.random() * src.length)];
+    });
+
+    // Award coins per win (5 per win)
+    const humanTeam = simTeams.find(t => t.isHuman);
+    if (humanTeam && save) {
+      const coinsGained = humanTeam.wins * 5;
+      if (coinsGained > 0) {
+        const sv = clone(save);
+        sv.coins += coinsGained;
+        persistSave(userName, sv);
+        set({ save: sv });
+      }
+    }
+
+    set({
+      seasonTeams: simTeams, seasonSchedule: simSchedule,
+      seasonStandings: standings, seasonStatus: 'standings',
+      seasonRoster, seasonTradesLeft: 3, seasonTradeLog: [],
+    });
+  },
+
+  advanceToTradeWindow: () => set({ seasonStatus: 'trade_window', seasonTradeTarget: null }),
+
+  openTradeModal:  (pos) => set({ seasonTradeTarget: pos }),
+  closeTradeModal: ()    => set({ seasonTradeTarget: null }),
+
+  executeTrade: (pos, target) => {
+    const { seasonRoster, seasonTradesLeft, seasonTeams, seasonTradeLog, save, userName } = get();
+    const TRADE_COST = 80;
+    if (seasonTradesLeft <= 0 || !save || save.coins < TRADE_COST) return;
+
+    const offered = seasonRoster.find(c => c.pos === pos);
+    if (!offered || offered.name === target.name) return;
+
+    const newRoster = seasonRoster.map(c => c.pos === pos ? target : c);
+    const newOvr    = Math.round(newRoster.reduce((s, c) => s + c.ovr, 0) / newRoster.length);
+    const newTeams  = seasonTeams.map(t => t.isHuman ? { ...t, ovr: newOvr } : t);
+
+    const sv = clone(save);
+    sv.coins -= TRADE_COST;
+    persistSave(userName, sv);
+
+    const newLog = [...seasonTradeLog, { pos, offered: offered.name, received: target.name }];
+    set({
+      save: sv, seasonRoster: newRoster, seasonTeams: newTeams,
+      seasonTradesLeft: seasonTradesLeft - 1,
+      seasonTradeLog: newLog, seasonTradeTarget: null,
+    });
+  },
+
+  skipTradeWindow: () => {
+    const { seasonStandings, seasonTeams } = get();
+    const playIn = seasonStandings ? buildPlayInFull(seasonTeams, seasonStandings) : null;
+    set({ seasonStatus: 'play_in', seasonTradeTarget: null, playInBracket: playIn, playInSeeds: null });
+  },
+
+  simPlayIn: () => {
+    const { playInBracket, seasonTeams, seasonStandings, difficulty } = get();
+    if (!playInBracket || !seasonStandings) return;
+    const diff = DIFF_SETTINGS[difficulty as keyof typeof DIFF_SETTINGS];
+    const resolved = resolvePlayIn(playInBracket, Date.now() & 0xFFFF, diff.bias);
+    const findTeam = (slug: string) => seasonTeams.find(t => t.slug === slug) ?? seasonTeams[0];
+    const buildConf = (rows: StandingsRow[], confResult: typeof resolved.east) => {
+      const top6 = rows.slice(0, 6).map(r => findTeam(r.slug));
+      return [...top6, confResult.seed7, confResult.seed8].filter((t): t is SeasonTeam => t !== null);
+    };
+    const east = buildConf(seasonStandings.east, resolved.east);
+    const west = buildConf(seasonStandings.west, resolved.west);
+    set({ playInBracket: resolved, playInSeeds: { east, west } });
+  },
+
+  advanceToPlayoffs: () => {
+    const { playInSeeds } = get();
+    if (!playInSeeds) return;
+    const bracket = buildPlayoffBracket(playInSeeds.east, playInSeeds.west);
+    set({ seasonStatus: 'playoffs', playoffBracket: bracket });
+  },
+
+  simNextPlayoffRound: () => {
+    const { playoffBracket, difficulty, save, userName } = get();
+    if (!playoffBracket || playoffBracket.champion) return;
+    const diff = DIFF_SETTINGS[difficulty as keyof typeof DIFF_SETTINGS];
+    const seed = Date.now() & 0xFFFF;
+
+    let eastRounds = playoffBracket.eastRounds;
+    let westRounds = playoffBracket.westRounds;
+    let finals: SeriesState | null = playoffBracket.finals;
+    let champion: SeasonTeam | null = playoffBracket.champion;
+
+    const eastLast = eastRounds[eastRounds.length - 1];
+    const eastResolved = eastLast.matchups.every(m => m.winner);
+    if (!eastResolved) {
+      const { round } = simPlayoffRound(eastLast, seed, diff.bias);
+      eastRounds = [...eastRounds.slice(0, -1), round];
+    } else if (eastRounds.length < 3) {
+      const winners = eastLast.matchups.map(m => m.winner!);
+      const nextRound = buildNextRound(winners);
+      const { round } = simPlayoffRound(nextRound, seed + 1000, diff.bias);
+      eastRounds = [...eastRounds, round];
+    }
+
+    const westLast = westRounds[westRounds.length - 1];
+    const westResolved = westLast.matchups.every(m => m.winner);
+    if (!westResolved) {
+      const { round } = simPlayoffRound(westLast, seed + 2000, diff.bias);
+      westRounds = [...westRounds.slice(0, -1), round];
+    } else if (westRounds.length < 3) {
+      const winners = westLast.matchups.map(m => m.winner!);
+      const nextRound = buildNextRound(winners);
+      const { round } = simPlayoffRound(nextRound, seed + 3000, diff.bias);
+      westRounds = [...westRounds, round];
+    }
+
+    const eastChampDone = eastRounds.length === 3 && eastRounds[2].matchups[0].winner;
+    const westChampDone = westRounds.length === 3 && westRounds[2].matchups[0].winner;
+
+    if (eastChampDone && westChampDone && !finals) {
+      const eastChamp = eastRounds[2].matchups[0].winner!;
+      const westChamp = westRounds[2].matchups[0].winner!;
+      finals = simFullSeries(eastChamp, westChamp, seed + 5000, diff.bias);
+      champion = finals.winner;
+
+      if (champion?.isHuman && save) {
+        const sv = clone(save);
+        sv.coins += 250;
+        sv.stats.titles += 1;
+        persistSave(userName, sv);
+        set({ save: sv });
+      }
+    }
+
+    set({ playoffBracket: { eastRounds, westRounds, finals, champion } });
+  },
+
   viewFriends:  () => set(s => ({ prevPhase: s.phase, phase: 'friends' })),
   viewHistory:  () => set(s => ({ prevPhase: s.phase, phase: 'history' })),
   viewShop:       () => set(s => ({ prevPhase: s.phase, phase: 'shop' })),

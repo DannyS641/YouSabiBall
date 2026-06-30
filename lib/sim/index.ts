@@ -78,6 +78,7 @@ export {
   buildPlayoffBracket,
   simPlayoffRound,
   buildNextRound,
+  playerSeasonCost,
 } from './season';
 export type {
   SeasonLength,
@@ -91,4 +92,6 @@ export type {
   SeriesState,
   PlayoffRound,
   PlayoffBracket,
+  SeasonRosterPlayer,
+  SeasonSave,
 } from './season';

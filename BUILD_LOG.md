@@ -92,5 +92,62 @@ Five new tables, all with RLS via `seasons_v2.user_id = auth.uid()`:
 
 TypeScript: **0 errors** after all changes.
 
-### Next: S2
-`SeasonHubScreen` — pick length (Short 14 / Standard 28 / Full 82), pick difficulty, view projected standings, start button → triggers regular-season simulation and shows live standings.
+### Next: S2 ✅ (2026-06-30)
+`SeasonHubScreen` with two internal views:
+
+**Setup view:** pick season length (Short 14 / Standard 28 / Full 82), conference (East/West), difficulty (Rookie/Pro/HoF). Human OVR pulled from `save.stats.topOvr`. "Simulate Season →" button triggers `startSeason()`.
+
+**Standings view:** East + West tables with seed coloring (green=playoff 1–6, amber=play-in 7–10, grey=eliminated). Human row highlighted in purple with star. Top banner shows human team's final W/L/PCT/DIFF. Coins awarded (+5 per win) immediately. "Advance to Trade Window" button (disabled, coming S3).
+
+Navigation: "Season Mode" button added to HomeScreen header. "Season" added to desktop Navbar + "🏟️ Season" in mobile menu.
+
+TypeScript: **0 errors**.
+
+### S3 ✅ (2026-06-30)
+**Trade Window** — mid-season player market after standings are revealed.
+
+- `startSeason()` now builds `seasonRoster` (5 real player cards, one per position, OVR-matched to the human's topOvr from their save)
+- New state: `seasonRoster`, `seasonTradesLeft` (max 3), `seasonTradeLog`, `seasonTradeTarget`
+- New actions: `advanceToTradeWindow`, `openTradeModal`, `closeTradeModal`, `executeTrade`, `skipTradeWindow`
+- `executeTrade(pos, target)`: deducts 80 coins, swaps the player, recalculates team OVR across `seasonTeams`, logs the trade, closes modal
+- **TradeWindowView**: shows 5 starter cards (tap to open trade modal), trade log of completed swaps, "Continue to Play-In" CTA
+- **TradeModal**: bottom-sheet on mobile, centered modal on desktop; generates 4 fresh candidates from full PLAYERS pool per position on mount; shows OVR diff (+/−) vs current player
+- "Enter Trade Window →" button in StandingsView now live (was disabled in S2)
+- `seasonStatus` extended to include `'trade_window' | 'play_in'`
+
+TypeScript: **0 errors**.
+
+### S4 ✅ (2026-06-30)
+**Play-In Tournament UI**
+
+- `playInBracket` and `playInSeeds` added to store state (initial: `null`)
+- `skipTradeWindow` now calls `buildPlayInFull()` to build the bracket before transitioning to `play_in`
+- `simPlayIn()` action: calls `resolvePlayIn()`, then builds the 8-team playoff field (top 6 + play-in seeds 7/8 per conf), stores in `playInSeeds`
+- `advanceToPlayoffs()` action: transitions `seasonStatus → 'playoffs'`
+- **`PlayInView`**: full play-in screen with:
+  - Human status banner: "clinched" (seed 1–6) · "you're in the play-in" (7–10) · "eliminated" (11–15)
+  - `PlayInConfCard` per conference: shows Game 1 (7v8), Game 2 (9v10), Game 3 (loser vs winner); winner highlighted in green; seed 7/8 result panel after sim
+  - Post-sim outcome banner: human advanced or eliminated
+  - Playoff field grid (8 per conf with human highlighted) after sim resolves
+  - "Simulate Play-In →" CTA before sim; "Enter Playoffs →" / "Watch Playoffs →" after
+
+TypeScript: **0 errors**.
+
+### S5 ✅ (2026-06-30)
+**Season Playoffs**
+
+- `playoffBracket: PlayoffBracket | null` added to store state (initial: `null`; reset on `viewSeasonHub`)
+- `advanceToPlayoffs()` now builds the bracket via `buildPlayoffBracket(playInSeeds.east, playInSeeds.west)` before switching `seasonStatus → 'playoffs'`
+- `simNextPlayoffRound()`: advances exactly one stage per call — resolves the current round if unresolved, otherwise builds + sims the next round (`buildNextRound` + `simPlayoffRound`) for both conferences in lockstep. Once both conference finals resolve, builds and sims the NBA Finals (`simFullSeries`) in the same click and sets `champion`. Awards +250 coins and +1 title to the save if the human wins it all.
+- **`PlayoffsView`**: full bracket screen with:
+  - Human fate banner (`getHumanFate`) — eliminated (with stage + opponent), still alive (with next stage), or in the Finals
+  - `ConferenceBracket` per conference — renders each completed round (QF/SF/CF) as a `SeriesCard` showing both teams, series score, and winner once resolved
+  - `FinalsCard` — dark "NBA Finals" panel with large score readout once the conference finals are done
+  - Champion banner — gold for a human title, neutral for a CPU champion
+  - "Simulate {stage} →" CTA that advances one round per click (label updates per stage); replaced by "← Home" only once a champion is crowned (Season Awards screen arrives in S6)
+- Verified with a temporary vitest smoke test simulating season → play-in → 6 playoff-round clicks end-to-end (full bracket resolves, champion crowned) — test removed after passing.
+
+TypeScript: **0 errors**.
+
+### Next: S6
+Stats screen (Standings + League Leaders + My Team tabs) + Season Awards + economy payouts + leaderboard write.

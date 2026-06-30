@@ -2,11 +2,41 @@
 // All randomness is seeded so results are reproducible.
 
 import { decide } from './decide';
-import type { Team } from '../types';
+import type { Team, Card, Position } from '../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type SeasonLength = 'short' | 'standard' | 'full';
+
+export interface SeasonRosterPlayer {
+  card:          Card;
+  isStarter:     boolean;
+  trainingBoost: number;   // 0–5, added to card.ovr for effective OVR
+}
+
+export interface SeasonSave {
+  status:          'roster_build' | 'regular_season' | 'trade_window' | 'play_in' | 'playoffs' | 'complete';
+  length:          SeasonLength;
+  conference:      'East' | 'West';
+  difficulty:      string;
+  teams:           SeasonTeam[];
+  schedule:        GameSlot[];
+  gameIndex:       number;             // next schedule index to sim
+  standings:       { east: StandingsRow[]; west: StandingsRow[] } | null;
+  rosterBudget:    number;             // remaining budget during roster_build
+  roster:          SeasonRosterPlayer[];
+  trainingPoints:  number;
+  tradesLeft:      number;
+  tradeLog:        { pos: string; offered: string; received: string }[];
+  playInBracket:   PlayInBracket | null;
+  playInSeeds:     { east: SeasonTeam[]; west: SeasonTeam[] } | null;
+  playoffBracket:  PlayoffBracket | null;
+}
+
+// coin cost to buy a player in the roster builder: OVR 84=45, 87=60, 99=120
+export function playerSeasonCost(ovr: number): number {
+  return Math.round((ovr - 75) * 5);
+}
 
 export const SEASON_GAME_COUNTS: Record<SeasonLength, number> = {
   short:    14,
