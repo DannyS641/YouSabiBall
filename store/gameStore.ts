@@ -19,8 +19,10 @@ import {
   todayStr, yesterdayStr,
   applyChallengeEvent, getDailyChallenges, claimSeasonReward,
   DRAFT_TOKENS, PACKS,
+  drawPerks,
+  drawUpgrades,
 } from '@/lib/sim';
-import type { GameEvent, EarnedBadge, ChallengeAward, DraftTokenTier, PackType } from '@/lib/sim';
+import type { GameEvent, EarnedBadge, ChallengeAward, DraftTokenTier, PackType, Perk, Upgrade } from '@/lib/sim';
 import { recordRunServer, syncSave, fetchLeaderboard } from '@/app/actions/game';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -35,7 +37,7 @@ const LB_KEY      = 'hardwood_lb_v2';
 const PROFILE_KEY = 'hardwood_profiles_v2';
 const SAVE_KEY    = 'hardwood_save_v1';
 
-export type Phase = 'register' | 'home' | 'draft' | 'court' | 'bracket' | 'game' | 'leaderboard' | 'challenges' | 'lobby' | 'mp_room' | 'friends' | 'history' | 'shop';
+export type Phase = 'register' | 'home' | 'draft' | 'court' | 'bracket' | 'game' | 'leaderboard' | 'challenges' | 'lobby' | 'mp_room' | 'friends' | 'history' | 'shop' | 'collection';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -78,6 +80,7 @@ function loadSave(name: string): Save {
       seasonPass:      { ...def.seasonPass, ...(x.seasonPass ?? {}) },
       dailyChallenges: x.dailyChallenges ?? [],
       recentRuns:      x.recentRuns ?? [],
+      bestPulls:       x.bestPulls ?? [],
     };
   } catch { return defaultSave(); }
 }
@@ -109,15 +112,24 @@ interface GameState {
   nameInput:  string;
 
   // Draft
-  roster:      Roster;
-  available:   Card[];
-  reelItems:   Card[];
-  spinning:    boolean;
-  lastPick:    Card | null;
-  draftToken:  DraftTokenTier;
+  roster:       Roster;
+  available:    Card[];
+  reelItems:    Card[];
+  spinning:     boolean;
+  lastPick:     Card | null;
+  draftToken:   DraftTokenTier;
+  rerollsUsed:  number;
 
   // Shop
   packResult:  Card[] | null;
+
+  // Perk (Phase 8)
+  pendingPerks: Perk[];     // 3 drawn perks waiting for selection
+  activePerk:   Perk | null; // chosen perk for current run
+
+  // Between-round upgrades (Phase 10)
+  pendingUpgrades: Upgrade[];   // 3 drawn upgrades waiting for selection
+  activeUpgrades:  Upgrade[];   // all chosen upgrades this run
 
   // Bracket
   bracket:      Bracket | null;
@@ -172,6 +184,7 @@ interface GameState {
   pickProfile:        (name: string) => void;
   startNewRun:        () => void;
   spin:               (onAnimate: (items: Card[], winIdx: number) => void) => void;
+  rerollPosition:     (pos: Position, onAnimate: (items: Card[], winIdx: number) => void) => void;
   commitSpin:         (winner: Card) => void;
   viewTeam:           () => void;
   enterPlayoffs:      () => void;
@@ -198,9 +211,13 @@ interface GameState {
   viewFriends:         () => void;
   viewHistory:         () => void;
   viewShop:            () => void;
+  viewCollection:      () => void;
   buyDraftToken:       (tier: 'gold' | 'diamond') => void;
   openPack:            (packType: PackType) => void;
   closePack:           () => void;
+  openPerkModal:       () => void;
+  choosePerk:          (perk: Perk | null) => void;  // null = skip
+  chooseUpgrade:       (upgrade: Upgrade | null) => void; // null = skip
   loadFriends:         () => Promise<void>;
   startChallenge:      (challengeId: string, target: number) => void;
 
@@ -217,7 +234,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   userName: '', difficulty: 'Pro', profiles: [], save: null,
   nameInput: '',
   roster: emptyRoster(), available: [], reelItems: [], spinning: false, lastPick: null,
-  draftToken: 'standard', packResult: null,
+  draftToken: 'standard', rerollsUsed: 0, packResult: null,
+  pendingPerks: [], activePerk: null,
+  pendingUpgrades: [], activeUpgrades: [],
   bracket: null, simStep: 0, champion: null, mvp: '',
   pointsEarned: 0, coinsEarned: 0, runLabel: '',
   live: null, _events: [], _liveHuman: null, _liveOpp: null,
@@ -260,10 +279,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   // ── New playoff run ──────────────────────────────────────────────────────────
   startNewRun: () => set({
     roster: emptyRoster(), available: [...PLAYERS], reelItems: [],
-    spinning: false, lastPick: null,
+    spinning: false, lastPick: null, rerollsUsed: 0,
     bracket: null, simStep: 0, champion: null, mvp: '',
     pointsEarned: 0, coinsEarned: 0, runLabel: '', live: null, _recorded: false,
     activeChallengeId: null, activeChallengeTarget: null,
+    pendingPerks: [], activePerk: null,
+    pendingUpgrades: [], activeUpgrades: [],
     phase: 'draft',
   }),
 
@@ -300,22 +321,103 @@ export const useGameStore = create<GameState>((set, get) => ({
       lastPick:  winner,
     });
 
-    // Fire draft_complete challenge event when all 5 positions are filled
-    if (save && POSITIONS.every(p => newRoster[p])) {
-      const cards       = POSITIONS.map(p => newRoster[p]!);
-      const teamAvg     = Math.round(cards.reduce((s, c) => s + c.ovr, 0) / cards.length);
-      const topOvr      = Math.max(...cards.map(c => c.ovr));
-      const goldCount   = cards.filter(c => c.ovr >= 87).length;
-      const award = applyChallengeEvent(save, { type: 'draft_complete', teamAvg, topOvr, goldCount });
-      const { save: saved, newly } = checkBadges(award.save);
-      persistSave(userName, saved);
-      set({ save: saved, challengeAward: award.completedIds.length ? award : null, badgeToast: newly });
+    // Update bestPulls (top 10 unique by name, OVR desc) + fire draft_complete challenge
+    if (save) {
+      const existing  = save.bestPulls ?? [];
+      const merged    = [...existing.filter(c => c.name !== winner.name), winner]
+        .sort((a, b) => b.ovr - a.ovr)
+        .slice(0, 10);
+      const withPulls = { ...save, bestPulls: merged };
+
+      if (POSITIONS.every(p => newRoster[p])) {
+        const cards     = POSITIONS.map(p => newRoster[p]!);
+        const teamAvg   = Math.round(cards.reduce((s, c) => s + c.ovr, 0) / cards.length);
+        const topOvr    = Math.max(...cards.map(c => c.ovr));
+        const goldCount = cards.filter(c => c.ovr >= 87).length;
+        const award     = applyChallengeEvent(withPulls, { type: 'draft_complete', teamAvg, topOvr, goldCount });
+        const { save: saved, newly } = checkBadges(award.save);
+        persistSave(userName, saved);
+        set({ save: saved, challengeAward: award.completedIds.length ? award : null, badgeToast: newly });
+      } else {
+        persistSave(userName, withPulls);
+        set({ save: withPulls });
+      }
     }
+  },
+
+  // ── Draft re-roll ─────────────────────────────────────────────────────────────
+  rerollPosition: (pos, onAnimate) => {
+    const { roster, available, save, userName, spinning, rerollsUsed } = get();
+    if (spinning) return;
+
+    const prev = roster[pos];
+    if (!prev) return;
+
+    const REROLL_COST = 30;
+    const isFree = rerollsUsed === 0;
+    if (!isFree && (!save || save.coins < REROLL_COST)) return;
+
+    let sv = clone(save!);
+    if (!isFree) {
+      sv.coins -= REROLL_COST;
+      persistSave(userName, sv);
+    }
+
+    set({
+      roster:      { ...roster, [pos]: undefined as unknown as Card },
+      available:   [...available, prev],
+      rerollsUsed: rerollsUsed + 1,
+      save:        !isFree ? sv : save,
+    });
+
+    get().spin(onAnimate);
   },
 
   viewTeam: () => set({ phase: 'court' }),
 
-  // ── Enter playoffs ───────────────────────────────────────────────────────────
+  // ── Perk selection (Phase 8) ─────────────────────────────────────────────────
+  openPerkModal: () => set({ pendingPerks: drawPerks() }),
+
+  choosePerk: (perk) => {
+    const { roster, userName, difficulty, save, pendingPerks } = get();
+    if (!pendingPerks.length) return;   // guard: only callable after openPerkModal
+
+    // Deduct coins if perk has a cost
+    let sv = clone(save!);
+    if (perk && perk.cost > 0) {
+      if (sv.coins < perk.cost) return;  // can't afford — UI should prevent this
+      sv.coins -= perk.cost;
+    }
+
+    const players = POSITIONS.map(p => roster[p]!);
+    const rating  = Math.round(players.reduce((a, b) => a + b.ovr, 0) / players.length);
+    const diff    = DIFF_SETTINGS[difficulty];
+    const perkBoost = perk ? perk.boost : 0;
+
+    const human: Team = {
+      name: userName, abbr: initials(userName), rating,
+      isHuman: true, players, color: '#7A3FF2',
+    };
+    const bracket = buildBracket(human, CPU_TEAMS.slice(0, 15).map(c => ({ ...c })));
+
+    sv.stats.drafts++;
+    sv.stats.topOvr = Math.max(sv.stats.topOvr, Math.max(...players.map(p => p.ovr)));
+    const { save: saved, newly } = checkBadges(sv);
+    persistSave(userName, saved);
+
+    set({
+      bracket, simStep: 0, champion: null, mvp: '',
+      pointsEarned: 0, coinsEarned: 0, runLabel: '', _recorded: false,
+      draftToken: 'standard',
+      pendingPerks: [], activePerk: perk,
+      pendingUpgrades: [], activeUpgrades: [],
+      _diffBias: diff.bias + perkBoost, _diffMult: diff.mult,
+      _liveHuman: human, save: saved, badgeToast: newly,
+      phase: 'bracket',
+    });
+  },
+
+  // ── Enter playoffs (direct path — kept for multiplayer/challenge flows) ────────
   enterPlayoffs: () => {
     const { roster, userName, difficulty, save } = get();
     const players = POSITIONS.map(p => roster[p]!);
@@ -337,7 +439,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       bracket, simStep: 0, champion: null, mvp: '',
       pointsEarned: 0, coinsEarned: 0, runLabel: '', _recorded: false,
-      draftToken: 'standard',  // token is consumed when playoffs start
+      draftToken: 'standard', pendingPerks: [], activePerk: null,
       _diffBias: diff.bias, _diffMult: diff.mult,
       _liveHuman: human, save: saved, badgeToast: newly,
       phase: 'bracket',
@@ -356,8 +458,19 @@ export const useGameStore = create<GameState>((set, get) => ({
     let extra: Partial<GameState> = {};
     if (simStep === 3) extra = champExtra(b) as Partial<GameState>;
 
-    set({ bracket: b, simStep: simStep + 1, live: null, showHighlight: false, ...extra });
-    if (simStep + 1 === 4 && !_recorded) get()._recordRun(b, _diffMult, userName);
+    const newStep = simStep + 1;
+
+    // Offer upgrade if human won their match and run is not over
+    let upgradeExtra: Partial<GameState> = {};
+    if (newStep < 4) {
+      const humanMatch = roundMatches(b, simStep).find(m => m.a?.isHuman || m.b?.isHuman);
+      if (humanMatch?.result?.winner.isHuman) {
+        upgradeExtra = { pendingUpgrades: drawUpgrades() };
+      }
+    }
+
+    set({ bracket: b, simStep: newStep, live: null, showHighlight: false, ...extra, ...upgradeExtra });
+    if (newStep === 4 && !_recorded) get()._recordRun(b, _diffMult, userName);
   },
 
   simAll: () => {
@@ -462,8 +575,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     let extra: Partial<GameState> = {};
     if (_liveRound === 3) extra = champExtra(b) as Partial<GameState>;
 
-    set({ bracket: b, simStep: _liveRound + 1, live: null, showHighlight: false, phase: 'bracket', ...extra });
-    if (_liveRound + 1 === 4) get()._recordRun(b, _diffMult, userName);
+    const newStep    = _liveRound + 1;
+    const humanWon   = live.winnerName === _liveHuman.name;
+    const upgradeExt: Partial<GameState> =
+      humanWon && newStep < 4 ? { pendingUpgrades: drawUpgrades() } : {};
+
+    set({ bracket: b, simStep: newStep, live: null, showHighlight: false, phase: 'bracket', ...extra, ...upgradeExt });
+    if (newStep === 4) get()._recordRun(b, _diffMult, userName);
   },
 
   // ── Economy ──────────────────────────────────────────────────────────────────
@@ -560,7 +678,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   setShareCopied:     v  => set({ shareCopied: v }),
   viewFriends:  () => set(s => ({ prevPhase: s.phase, phase: 'friends' })),
   viewHistory:  () => set(s => ({ prevPhase: s.phase, phase: 'history' })),
-  viewShop:     () => set(s => ({ prevPhase: s.phase, phase: 'shop' })),
+  viewShop:       () => set(s => ({ prevPhase: s.phase, phase: 'shop' })),
+  viewCollection: () => set(s => ({ prevPhase: s.phase, phase: 'collection' })),
 
   buyDraftToken: (tier) => {
     const { save, userName, draftToken } = get();
@@ -588,6 +707,17 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   closePack: () => set({ packResult: null }),
+
+  chooseUpgrade: (upgrade) => {
+    const { _diffBias, activeUpgrades, pendingUpgrades } = get();
+    if (!pendingUpgrades.length) return;
+    const boost = upgrade ? upgrade.boost : 0;
+    set({
+      pendingUpgrades: [],
+      activeUpgrades: upgrade ? [...activeUpgrades, upgrade] : activeUpgrades,
+      _diffBias: _diffBias + boost,
+    });
+  },
 
   startChallenge: (challengeId, target) => set({
     activeChallengeId: challengeId, activeChallengeTarget: target,

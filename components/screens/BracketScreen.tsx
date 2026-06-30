@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react';
 import { useGameStore, fmt } from '@/store/gameStore';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import BracketTree from '@/components/BracketTree';
+import type { Upgrade } from '@/lib/sim';
+
+type Difficulty = 'Rookie' | 'Pro' | 'Hall of Fame';
+const DIFF_COLORS: Record<Difficulty, string> = {
+  'Rookie':       '#22C55E',
+  'Pro':          '#F59E0B',
+  'Hall of Fame': '#E2622C',
+};
 
 export default function BracketScreen() {
   const bracket           = useGameStore(s => s.bracket);
@@ -18,6 +26,11 @@ export default function BracketScreen() {
   const playRound         = useGameStore(s => s.playRound);
   const startNewRun       = useGameStore(s => s.startNewRun);
   const showHighlightCard = useGameStore(s => s.showHighlightCard);
+  const activePerk        = useGameStore(s => s.activePerk);
+  const difficulty        = useGameStore(s => s.difficulty) as Difficulty;
+  const pendingUpgrades   = useGameStore(s => s.pendingUpgrades);
+  const activeUpgrades    = useGameStore(s => s.activeUpgrades);
+  const chooseUpgrade     = useGameStore(s => s.chooseUpgrade);
 
   const [showChampionPopup, setShowChampionPopup] = useState(false);
   const { isMobile } = useBreakpoint();
@@ -181,7 +194,32 @@ export default function BracketScreen() {
                   </span>
                 </div>
               )}
-              <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 20 : 24 }}>NBA Playoffs</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 20 : 24 }}>NBA Playoffs</div>
+            {/* Difficulty badge */}
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              background: `${DIFF_COLORS[difficulty]}18`,
+              border: `1px solid ${DIFF_COLORS[difficulty]}44`,
+              borderRadius: 20, padding: '3px 10px',
+            }}>
+              <span style={{ color: DIFF_COLORS[difficulty], fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                {difficulty === 'Hall of Fame' ? 'HOF' : difficulty.toUpperCase()}
+              </span>
+            </div>
+            {activePerk && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                background: '#EDE9FE', borderRadius: 20, padding: '3px 10px',
+                border: '1px solid #C4B5FD',
+              }}>
+                <span style={{ fontSize: 13 }}>{activePerk.glyph}</span>
+                <span style={{ color: '#7A3FF2', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  {activePerk.name}
+                </span>
+              </div>
+            )}
+          </div>
             </div>
 
             {/* Buttons */}
@@ -254,6 +292,25 @@ export default function BracketScreen() {
           </div>
         )}
 
+        {/* Active upgrades strip */}
+        {activeUpgrades.length > 0 && !done && (
+          <div style={{
+            flexShrink: 0,
+            display: 'flex', gap: 6, flexWrap: 'wrap',
+          }}>
+            {activeUpgrades.map(u => (
+              <div key={u.id} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                background: '#F0FDF4', border: '1px solid #86EFAC',
+                borderRadius: 20, padding: '3px 10px',
+                fontSize: 11, fontWeight: 700, color: '#166534',
+              }}>
+                <span>{u.glyph}</span> {u.name} <span style={{ color: '#4ADE80' }}>+{u.boost}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* ── Bracket card – fills remaining space ── */}
         {bracket && (
           <div style={{
@@ -268,7 +325,93 @@ export default function BracketScreen() {
           </div>
         )}
       </div>
+
+      {/* Between-round upgrade modal */}
+      {pendingUpgrades.length > 0 && (
+        <UpgradeModal
+          upgrades={pendingUpgrades}
+          isMobile={isMobile}
+          onChoose={chooseUpgrade}
+        />
+      )}
     </>
+  );
+}
+
+// ─── Between-round upgrade modal ─────────────────────────────────────────────
+
+function UpgradeModal({
+  upgrades, isMobile, onChoose,
+}: {
+  upgrades: Upgrade[]; isMobile: boolean;
+  onChoose: (u: Upgrade | null) => void;
+}) {
+  const ROUND_NAMES = ['Conference Semis', 'Conference Finals', 'NBA Finals'];
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 200,
+      background: 'rgba(0,0,0,0.72)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 20,
+    }}>
+      <div style={{
+        width: '100%', maxWidth: 460,
+        background: '#16181D', borderRadius: 20,
+        padding: isMobile ? '22px 16px 18px' : '26px 26px 22px',
+        border: '1px solid #374151',
+        maxHeight: 'calc(100dvh - 40px)', overflowY: 'auto',
+      }}>
+        <div style={{ color: '#4ADE80', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textAlign: 'center', marginBottom: 4 }}>
+          ✓ ROUND WON
+        </div>
+        <div style={{ color: '#F4F5F7', fontWeight: 800, fontSize: isMobile ? 17 : 19, textAlign: 'center', marginBottom: 4 }}>
+          Pick a boost for the next round
+        </div>
+        <div style={{ color: '#6B7280', fontSize: 12, textAlign: 'center', marginBottom: 20 }}>
+          Free · stacks with your coaching perk
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+          {upgrades.map(u => (
+            <button
+              key={u.id}
+              onClick={() => onChoose(u)}
+              style={{
+                background: '#1E2128', border: '1px solid #374151',
+                borderRadius: 12, padding: '14px 16px',
+                display: 'flex', alignItems: 'center', gap: 12,
+                cursor: 'pointer', textAlign: 'left', width: '100%',
+              }}
+            >
+              <span style={{ fontSize: 26, flexShrink: 0 }}>{u.glyph}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: '#F4F5F7', fontWeight: 700, fontSize: 13 }}>{u.name}</div>
+                <div style={{ color: '#9CA3AF', fontSize: 11, marginTop: 2 }}>{u.desc}</div>
+              </div>
+              <div style={{
+                background: '#7A3FF222', border: '1px solid #7A3FF244',
+                borderRadius: 20, padding: '3px 10px', flexShrink: 0,
+                color: '#A78BFA', fontSize: 11, fontWeight: 700,
+              }}>
+                +{u.boost}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => onChoose(null)}
+          style={{
+            width: '100%', padding: '10px 0',
+            background: 'transparent', border: '1px solid #374151',
+            borderRadius: 10, color: '#6B7280',
+            fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          Skip boost
+        </button>
+      </div>
+    </div>
   );
 }
 

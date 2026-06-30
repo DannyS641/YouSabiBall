@@ -9,15 +9,18 @@ import { tierFor, DRAFT_TOKENS } from '@/lib/sim';
 const REEL_ITEM_W = 92;
 
 export default function DraftScreen() {
-  const roster      = useGameStore(s => s.roster);
-  const reelItems   = useGameStore(s => s.reelItems);
-  const spinning    = useGameStore(s => s.spinning);
-  const lastPick    = useGameStore(s => s.lastPick);
-  const userName    = useGameStore(s => s.userName);
-  const spin        = useGameStore(s => s.spin);
-  const commitSpin  = useGameStore(s => s.commitSpin);
-  const viewTeam    = useGameStore(s => s.viewTeam);
-  const enterPlayoffs = useGameStore(s => s.enterPlayoffs);
+  const roster         = useGameStore(s => s.roster);
+  const reelItems      = useGameStore(s => s.reelItems);
+  const spinning       = useGameStore(s => s.spinning);
+  const lastPick       = useGameStore(s => s.lastPick);
+  const userName       = useGameStore(s => s.userName);
+  const save           = useGameStore(s => s.save);
+  const spin           = useGameStore(s => s.spin);
+  const commitSpin     = useGameStore(s => s.commitSpin);
+  const rerollPosition = useGameStore(s => s.rerollPosition);
+  const rerollsUsed    = useGameStore(s => s.rerollsUsed);
+  const viewTeam       = useGameStore(s => s.viewTeam);
+  const enterPlayoffs  = useGameStore(s => s.enterPlayoffs);
 
   const { isMobile } = useBreakpoint();
   const draftToken = useGameStore(s => s.draftToken);
@@ -25,6 +28,22 @@ export default function DraftScreen() {
   const complete   = POSITIONS.every(p => roster[p]);
   const open     = POSITIONS.filter(p => !roster[p]);
   const filled   = POSITIONS.filter(p => roster[p]);
+
+  const REROLL_COST = 30;
+
+  function handleReroll(pos: import('@/lib/types').Position) {
+    rerollPosition(pos, (items, winIdx) => {
+      const el = reelRef.current;
+      if (!el) { commitSpin(items[winIdx]); return; }
+      const targetX = -(winIdx * REEL_ITEM_W) + el.clientWidth / 2 - REEL_ITEM_W / 2;
+      el.style.transition = 'none';
+      el.style.transform  = 'translateX(0)';
+      void el.offsetWidth;
+      el.style.transition = 'transform 2.4s cubic-bezier(0.17, 0.67, 0.12, 1)';
+      el.style.transform  = `translateX(${targetX}px)`;
+      setTimeout(() => commitSpin(items[winIdx]), 2500);
+    });
+  }
 
   function handleSpin() {
     spin((items, winIdx) => {
@@ -119,9 +138,29 @@ export default function DraftScreen() {
                   <div style={{
                     color: TIER_COLORS[tierFor(card.ovr)] ?? '#6B7280',
                     fontWeight: 800, fontSize: isMobile ? 14 : 15,
+                    marginBottom: 4,
                   }}>
                     {card.ovr}
                   </div>
+                  {!spinning && (
+                    <button
+                      onClick={() => handleReroll(pos)}
+                      disabled={!!(rerollsUsed > 0 && (!save || save.coins < REROLL_COST))}
+                      title={rerollsUsed === 0 ? 'Re-roll (free)' : `Re-roll (${REROLL_COST}🪙)`}
+                      style={{
+                        background: 'none',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: 6, padding: '1px 4px',
+                        fontSize: isMobile ? 8 : 9,
+                        color: (rerollsUsed > 0 && (!save || save.coins < REROLL_COST)) ? '#D1D5DB' : '#6B7280',
+                        cursor: (rerollsUsed > 0 && (!save || save.coins < REROLL_COST)) ? 'default' : 'pointer',
+                        fontWeight: 600,
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {rerollsUsed === 0 ? '🔄 FREE' : `🔄 ${REROLL_COST}🪙`}
+                    </button>
+                  )}
                 </>
               ) : (
                 <div style={{ color: '#D1D5DB', fontSize: isMobile ? 10 : 12, marginTop: 2 }}>—</div>

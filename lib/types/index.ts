@@ -157,6 +157,8 @@ export interface Save {
   seasonPass:       SeasonPass;
   // Phase 6
   recentRuns:       RunRecord[];
+  // Phase 9
+  bestPulls:        Card[];   // top 10 ever by OVR, sorted desc
 }
 
 // ─── Badge ────────────────────────────────────────────────────────────────────

@@ -4,11 +4,24 @@ import { useGameStore, POS_COLORS, POS_SPOT_HALF, TIER_COLORS } from '@/store/ga
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { POSITIONS } from '@/lib/types';
 import { tierFor, getTeamProfile } from '@/lib/sim';
+import type { Perk } from '@/lib/sim';
+
+type Difficulty = 'Rookie' | 'Pro' | 'Hall of Fame';
+const DIFF_INFO: Record<Difficulty, { label: string; hint: string; color: string; mult: string }> = {
+  'Rookie':       { label: 'Rookie',       hint: 'Weaker opponents',  color: '#22C55E', mult: '×0.7'  },
+  'Pro':          { label: 'Pro',           hint: 'Standard',          color: '#F59E0B', mult: '×1.0'  },
+  'Hall of Fame': { label: 'Hall of Fame',  hint: 'Toughest field',    color: '#E2622C', mult: '×1.45' },
+};
 
 export default function CourtScreen() {
   const roster        = useGameStore(s => s.roster);
   const userName      = useGameStore(s => s.userName);
-  const enterPlayoffs = useGameStore(s => s.enterPlayoffs);
+  const save          = useGameStore(s => s.save);
+  const difficulty    = useGameStore(s => s.difficulty) as Difficulty;
+  const setDifficulty = useGameStore(s => s.setDifficulty);
+  const pendingPerks  = useGameStore(s => s.pendingPerks);
+  const openPerkModal = useGameStore(s => s.openPerkModal);
+  const choosePerk    = useGameStore(s => s.choosePerk);
   const redraft       = useGameStore(s => s.startNewRun);
   const { isMobile } = useBreakpoint();
 
@@ -17,6 +30,7 @@ export default function CourtScreen() {
   const dotSize = isMobile ? 36 : 50;
 
   return (
+    <>
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '16px 14px 60px' : '28px 24px 60px' }}>
 
       {/* Header */}
@@ -28,7 +42,7 @@ export default function CourtScreen() {
           <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 20 : 26 }}>On the floor</div>
         </div>
         <button
-          onClick={enterPlayoffs}
+          onClick={openPerkModal}
           style={{
             background: '#16181D', border: 'none', borderRadius: 10,
             padding: isMobile ? '10px 14px' : '11px 20px',
@@ -156,6 +170,41 @@ export default function CourtScreen() {
             </div>
           )}
 
+          {/* Difficulty picker */}
+          <div style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: '1px solid #E5E7EB', flex: isMobile ? '1 1 100%' : undefined }}>
+            <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 8 }}>
+              DIFFICULTY
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(Object.keys(DIFF_INFO) as Difficulty[]).map(d => {
+                const info = DIFF_INFO[d];
+                const active = difficulty === d;
+                return (
+                  <button
+                    key={d}
+                    onClick={() => setDifficulty(d)}
+                    style={{
+                      flex: 1, padding: isMobile ? '6px 2px' : '7px 4px',
+                      borderRadius: 8, border: active ? `2px solid ${info.color}` : '2px solid #E5E7EB',
+                      background: active ? `${info.color}12` : 'transparent',
+                      cursor: 'pointer', textAlign: 'center',
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, fontSize: isMobile ? 9 : 10, color: active ? info.color : '#6B7280', marginBottom: 2 }}>
+                      {info.label}
+                    </div>
+                    <div style={{ fontSize: isMobile ? 8 : 9, color: active ? info.color : '#9CA3AF', fontWeight: 600 }}>
+                      {info.mult}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 7, fontSize: 10, color: DIFF_INFO[difficulty].color, fontWeight: 600, textAlign: 'center' }}>
+              {DIFF_INFO[difficulty].hint} · {DIFF_INFO[difficulty].mult} coin rewards
+            </div>
+          </div>
+
           <button onClick={redraft} style={{
             background: 'transparent', border: '1px solid #E5E7EB',
             borderRadius: 10, padding: isMobile ? '8px 14px' : '10px',
@@ -182,6 +231,129 @@ export default function CourtScreen() {
             <div style={{ color: '#6B7280', fontSize: 12, lineHeight: 1.5 }}>{profile.description}</div>
           </div>
         )}
+      </div>
+    </div>
+
+    {/* Perk selection modal */}
+    {pendingPerks.length > 0 && (
+      <PerkModal
+        perks={pendingPerks}
+        coins={save?.coins ?? 0}
+        isMobile={isMobile}
+        onChoose={choosePerk}
+      />
+    )}
+    </>
+  );
+}
+
+// ─── Perk Modal ───────────────────────────────────────────────────────────────
+
+function PerkModal({
+  perks, coins, isMobile, onChoose,
+}: {
+  perks: Perk[]; coins: number; isMobile: boolean;
+  onChoose: (perk: Perk | null) => void;
+}) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 200,
+      background: 'rgba(0,0,0,0.72)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 20,
+    }}>
+      <div style={{
+        width: '100%', maxWidth: 520,
+        background: '#16181D', borderRadius: 20,
+        padding: isMobile ? '24px 18px 20px' : '28px 28px 24px',
+        border: '1px solid #374151',
+        maxHeight: 'calc(100dvh - 40px)', overflowY: 'auto',
+      }}>
+        <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', marginBottom: 6, textAlign: 'center' }}>
+          CHOOSE YOUR COACHING PERK
+        </div>
+        <div style={{ color: '#F4F5F7', fontWeight: 800, fontSize: isMobile ? 18 : 21, textAlign: 'center', marginBottom: 6 }}>
+          Pick one for this run
+        </div>
+        <div style={{ color: '#6B7280', fontSize: 12, textAlign: 'center', marginBottom: 22 }}>
+          Boosts your team rating for the entire playoff run
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+          {perks.map(perk => {
+            const canAfford = coins >= perk.cost;
+            return (
+              <div
+                key={perk.id}
+                style={{
+                  background: '#1E2128', borderRadius: 12,
+                  border: '1px solid #374151',
+                  padding: isMobile ? '14px 14px' : '16px 18px',
+                  display: 'flex', alignItems: 'center', gap: 14,
+                }}
+              >
+                <div style={{
+                  fontSize: isMobile ? 28 : 32, flexShrink: 0,
+                  width: 48, textAlign: 'center',
+                }}>
+                  {perk.glyph}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: '#F4F5F7', fontWeight: 700, fontSize: isMobile ? 13 : 14 }}>{perk.name}</div>
+                  <div style={{ color: '#9CA3AF', fontSize: 12, marginTop: 2, lineHeight: 1.4 }}>{perk.desc}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                    <span style={{
+                      background: '#7A3FF222', border: '1px solid #7A3FF244',
+                      borderRadius: 20, padding: '2px 8px',
+                      color: '#A78BFA', fontSize: 10, fontWeight: 700,
+                    }}>
+                      +{perk.boost} team rating
+                    </span>
+                    {perk.cost > 0 && (
+                      <span style={{
+                        display: 'flex', alignItems: 'center', gap: 3,
+                        color: canAfford ? '#FDE68A' : '#6B7280', fontSize: 11, fontWeight: 700,
+                      }}>
+                        🪙 {perk.cost}
+                        {!canAfford && <span style={{ color: '#6B7280', fontSize: 10, marginLeft: 2 }}>(need more)</span>}
+                      </span>
+                    )}
+                    {perk.cost === 0 && (
+                      <span style={{ color: '#1F9D6B', fontSize: 10, fontWeight: 700 }}>FREE</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => canAfford && onChoose(perk)}
+                  disabled={!canAfford}
+                  style={{
+                    background: canAfford ? '#7A3FF2' : '#2A2D35',
+                    border: 'none', borderRadius: 9,
+                    padding: '9px 16px',
+                    color: canAfford ? '#fff' : '#4B5563',
+                    fontWeight: 800, fontSize: 13,
+                    cursor: canAfford ? 'pointer' : 'default',
+                    flexShrink: 0, whiteSpace: 'nowrap',
+                  }}
+                >
+                  Pick
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        <button
+          onClick={() => onChoose(null)}
+          style={{
+            width: '100%', padding: '11px 0',
+            background: 'transparent', border: '1px solid #374151',
+            borderRadius: 10, color: '#6B7280',
+            fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          Skip — enter without a perk
+        </button>
       </div>
     </div>
   );

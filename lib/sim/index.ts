@@ -42,6 +42,12 @@ export type { EarnedBadge, DraftTokenTier, PackType } from './economy';
 export { BADGES }              from './badges';
 
 export { getTeamProfile }      from './teamProfile';
+
+export { PERK_POOL, drawPerks } from './perks';
+export type { Perk }            from './perks';
+
+export { UPGRADE_POOL, drawUpgrades } from './upgrades';
+export type { Upgrade }               from './upgrades';
 export type { TeamProfile }    from './teamProfile';
 
 export {
