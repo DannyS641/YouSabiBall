@@ -96,6 +96,54 @@ export function checkBadges(save: Save): { save: Save; newly: EarnedBadge[] } {
   return { save: { ...save, badges: [...got] }, newly };
 }
 
+// ─── Draft Tokens ────────────────────────────────────────────────────────────
+
+export type DraftTokenTier = 'standard' | 'gold' | 'diamond';
+
+export const DRAFT_TOKENS = {
+  gold: {
+    label:  'Gold Token',
+    desc:   'Your entire next draft pulls only from OVR 87+ players',
+    cost:   250,
+    minOvr: 87,
+    color:  '#E0A93B',
+    glyph:  '🥇',
+  },
+  diamond: {
+    label:  'Diamond Token',
+    desc:   'Your entire next draft pulls only from OVR 90+ players',
+    cost:   700,
+    minOvr: 90,
+    color:  '#4FB0E0',
+    glyph:  '💎',
+  },
+} as const;
+
+// ─── Packs ────────────────────────────────────────────────────────────────────
+
+export type PackType = 'basic' | 'gold';
+
+export const PACKS = {
+  basic: {
+    label:  'Basic Pack',
+    desc:   '3 random players revealed',
+    cost:   60,
+    count:  3,
+    minOvr: 0,
+    color:  '#9AA0AB',
+    glyph:  '📦',
+  },
+  gold: {
+    label:  'Gold Pack',
+    desc:   '3 players, all OVR 87+',
+    cost:   200,
+    count:  3,
+    minOvr: 87,
+    color:  '#E0A93B',
+    glyph:  '🏅',
+  },
+} as const;
+
 // ─── Date helpers (pure) ──────────────────────────────────────────────────────
 
 export function todayStr(): string {

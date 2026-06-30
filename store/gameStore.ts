@@ -18,8 +18,9 @@ import {
   defaultSave, tierFor, TIER_COLORS, dayReward, buildStreakNodes, checkBadges,
   todayStr, yesterdayStr,
   applyChallengeEvent, getDailyChallenges, claimSeasonReward,
+  DRAFT_TOKENS, PACKS,
 } from '@/lib/sim';
-import type { GameEvent, EarnedBadge, ChallengeAward } from '@/lib/sim';
+import type { GameEvent, EarnedBadge, ChallengeAward, DraftTokenTier, PackType } from '@/lib/sim';
 import { recordRunServer, syncSave, fetchLeaderboard } from '@/app/actions/game';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -34,7 +35,7 @@ const LB_KEY      = 'hardwood_lb_v2';
 const PROFILE_KEY = 'hardwood_profiles_v2';
 const SAVE_KEY    = 'hardwood_save_v1';
 
-export type Phase = 'register' | 'home' | 'draft' | 'court' | 'bracket' | 'game' | 'leaderboard' | 'challenges' | 'lobby' | 'mp_room' | 'friends' | 'history';
+export type Phase = 'register' | 'home' | 'draft' | 'court' | 'bracket' | 'game' | 'leaderboard' | 'challenges' | 'lobby' | 'mp_room' | 'friends' | 'history' | 'shop';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -108,11 +109,15 @@ interface GameState {
   nameInput:  string;
 
   // Draft
-  roster:     Roster;
-  available:  Card[];
-  reelItems:  Card[];
-  spinning:   boolean;
-  lastPick:   Card | null;
+  roster:      Roster;
+  available:   Card[];
+  reelItems:   Card[];
+  spinning:    boolean;
+  lastPick:    Card | null;
+  draftToken:  DraftTokenTier;
+
+  // Shop
+  packResult:  Card[] | null;
 
   // Bracket
   bracket:      Bracket | null;
@@ -192,6 +197,10 @@ interface GameState {
   setShareCopied:      (v: boolean) => void;
   viewFriends:         () => void;
   viewHistory:         () => void;
+  viewShop:            () => void;
+  buyDraftToken:       (tier: 'gold' | 'diamond') => void;
+  openPack:            (packType: PackType) => void;
+  closePack:           () => void;
   loadFriends:         () => Promise<void>;
   startChallenge:      (challengeId: string, target: number) => void;
 
@@ -208,6 +217,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   userName: '', difficulty: 'Pro', profiles: [], save: null,
   nameInput: '',
   roster: emptyRoster(), available: [], reelItems: [], spinning: false, lastPick: null,
+  draftToken: 'standard', packResult: null,
   bracket: null, simStep: 0, champion: null, mvp: '',
   pointsEarned: 0, coinsEarned: 0, runLabel: '',
   live: null, _events: [], _liveHuman: null, _liveOpp: null,
@@ -259,11 +269,14 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   // ── Draft spin ───────────────────────────────────────────────────────────────
   spin: (onAnimate) => {
-    const { spinning, roster, available } = get();
+    const { spinning, roster, available, draftToken } = get();
     if (spinning || POSITIONS.every(p => roster[p])) return;
 
-    const open = POSITIONS.filter(p => !roster[p]);
-    const elig = available.filter(p => open.includes(p.pos));
+    const open    = POSITIONS.filter(p => !roster[p]);
+    const minOvr  = draftToken !== 'standard' ? DRAFT_TOKENS[draftToken].minOvr : 0;
+    const boosted = available.filter(p => open.includes(p.pos) && p.ovr >= minOvr);
+    // fall back to full pool per position if boosted pool is empty for that position
+    const elig    = boosted.length ? boosted : available.filter(p => open.includes(p.pos));
     if (!elig.length) return;
 
     const winner = elig[Math.floor(Math.random() * elig.length)];
@@ -324,6 +337,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       bracket, simStep: 0, champion: null, mvp: '',
       pointsEarned: 0, coinsEarned: 0, runLabel: '', _recorded: false,
+      draftToken: 'standard',  // token is consumed when playoffs start
       _diffBias: diff.bias, _diffMult: diff.mult,
       _liveHuman: human, save: saved, badgeToast: newly,
       phase: 'bracket',
@@ -546,6 +560,34 @@ export const useGameStore = create<GameState>((set, get) => ({
   setShareCopied:     v  => set({ shareCopied: v }),
   viewFriends:  () => set(s => ({ prevPhase: s.phase, phase: 'friends' })),
   viewHistory:  () => set(s => ({ prevPhase: s.phase, phase: 'history' })),
+  viewShop:     () => set(s => ({ prevPhase: s.phase, phase: 'shop' })),
+
+  buyDraftToken: (tier) => {
+    const { save, userName, draftToken } = get();
+    if (!save) return;
+    const token = DRAFT_TOKENS[tier];
+    if (save.coins < token.cost) return;
+    // Refund the old token's cost if swapping mid-run
+    const refund = draftToken !== 'standard' ? DRAFT_TOKENS[draftToken as 'gold' | 'diamond'].cost : 0;
+    const newCoins = save.coins - token.cost + refund;
+    const sv = { ...save, coins: newCoins };
+    persistSave(userName, sv);
+    set({ save: sv, draftToken: tier });
+  },
+
+  openPack: (packType) => {
+    const { save, userName } = get();
+    if (!save) return;
+    const pack = PACKS[packType];
+    if (save.coins < pack.cost) return;
+    const pool    = PLAYERS.filter(p => p.ovr >= pack.minOvr);
+    const cards: Card[] = Array.from({ length: pack.count }, () => pool[Math.floor(Math.random() * pool.length)]);
+    const sv = { ...save, coins: save.coins - pack.cost, stats: { ...save.stats, pulls: save.stats.pulls + pack.count } };
+    persistSave(userName, sv);
+    set({ save: sv, packResult: cards });
+  },
+
+  closePack: () => set({ packResult: null }),
 
   startChallenge: (challengeId, target) => set({
     activeChallengeId: challengeId, activeChallengeTarget: target,

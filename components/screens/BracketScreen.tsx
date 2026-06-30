@@ -262,7 +262,7 @@ export default function BracketScreen() {
             padding: isMobile ? '10px 8px' : '20px 20px 16px',
             border: '1px solid #E5E7EB',
             overflow: 'auto',
-            display: 'flex', flexDirection: 'column', justifyContent: 'center',
+            display: 'flex', flexDirection: 'column', justifyContent: 'flex-start',
           }}>
             <BracketTree bracket={bracket} />
           </div>

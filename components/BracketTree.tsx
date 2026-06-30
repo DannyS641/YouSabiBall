@@ -134,8 +134,8 @@ export default function BracketTree({ bracket }: { bracket: Bracket }) {
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    // min 0.45 so the bracket stays readable on mobile (parent can scroll-x)
-    const update = () => setScale(Math.max(0.45, Math.min(1, el.clientWidth / NATURAL_W)));
+    // min 0.6 so the bracket is readable on mobile (parent card has overflow:auto for horizontal scroll)
+    const update = () => setScale(Math.max(0.6, Math.min(1, el.clientWidth / NATURAL_W)));
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);

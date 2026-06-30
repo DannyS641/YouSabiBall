@@ -4,7 +4,7 @@ import { useRef } from 'react';
 import { useGameStore, POS_COLORS, TIER_COLORS, lastName } from '@/store/gameStore';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { POSITIONS } from '@/lib/types';
-import { tierFor } from '@/lib/sim';
+import { tierFor, DRAFT_TOKENS } from '@/lib/sim';
 
 const REEL_ITEM_W = 92;
 
@@ -20,8 +20,9 @@ export default function DraftScreen() {
   const enterPlayoffs = useGameStore(s => s.enterPlayoffs);
 
   const { isMobile } = useBreakpoint();
-  const reelRef  = useRef<HTMLDivElement>(null);
-  const complete = POSITIONS.every(p => roster[p]);
+  const draftToken = useGameStore(s => s.draftToken);
+  const reelRef    = useRef<HTMLDivElement>(null);
+  const complete   = POSITIONS.every(p => roster[p]);
   const open     = POSITIONS.filter(p => !roster[p]);
   const filled   = POSITIONS.filter(p => roster[p]);
 
@@ -57,6 +58,26 @@ export default function DraftScreen() {
           <span style={{ fontSize: 11 }}>positions</span>
         </div>
       </div>
+
+      {/* Active draft token banner */}
+      {draftToken !== 'standard' && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: draftToken === 'diamond' ? '#EFF6FF' : '#FFFBEB',
+          border: `1.5px solid ${DRAFT_TOKENS[draftToken].color}`,
+          borderRadius: 10, padding: '10px 14px', marginBottom: 16,
+        }}>
+          <span style={{ fontSize: 18 }}>{DRAFT_TOKENS[draftToken].glyph}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ color: '#111827', fontWeight: 700, fontSize: 13 }}>
+              {DRAFT_TOKENS[draftToken].label} active
+            </span>
+            <span style={{ color: '#6B7280', fontSize: 12, marginLeft: 8 }}>
+              Pulling OVR {DRAFT_TOKENS[draftToken].minOvr}+ only
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Position slots */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: isMobile ? 6 : 10, marginBottom: 16 }}>
