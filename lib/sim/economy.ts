@@ -19,6 +19,8 @@ export function defaultSave(): Save {
     seasonPass: { season: 1, xp: 0, level: 1, claimed: [] },
     recentRuns: [],
     bestPulls: [],
+    favoritePlayers: {},
+    seenTips: [],
   };
 }
 

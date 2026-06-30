@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useGameStore, TIER_COLORS, fmtCoins } from '@/store/gameStore';
+import TipBanner from '@/components/TipBanner';
 import { DRAFT_TOKENS, PACKS, tierFor } from '@/lib/sim';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import type { Card } from '@/lib/types';
@@ -21,6 +22,12 @@ export default function ShopScreen() {
 
   return (
     <div style={{ maxWidth: 780, margin: '0 auto', padding: isMobile ? '20px 14px 80px' : '28px 24px 80px' }}>
+
+      <TipBanner
+        id="shop"
+        icon="🛒"
+        text="Buy Draft Tokens to guarantee higher OVR players on your next spin. Open packs to add to your vault."
+      />
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>

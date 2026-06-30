@@ -63,9 +63,34 @@ Holds all transient UI state across 7 phases: `register → home → draft → c
 
 ---
 
-## Phase 1 next steps
-1. Supabase auth (anonymous → linked)
-2. Server actions for `_recordRun` (move off client)
-3. Leaderboard sync (real-time via Supabase Realtime)
-4. PvP draft room (presence channel)
-5. Season/league system (server-authoritative)
+---
+
+## Season Mode — S1 ✅ (2026-06-30)
+
+### Removed
+- Phase 20 "5-run season" system: `runSeason` from `Save` type and `defaultSave`, season tracking block from `_recordRun`, `pendingSeasonEnd` state + `claimSeasonEnd` action, Season Progress card from HomeScreen, `SeasonEndModal` from BracketScreen.
+
+### Added
+**`supabase/migrations/006_season_mode.sql`**
+Five new tables, all with RLS via `seasons_v2.user_id = auth.uid()`:
+- `seasons_v2` — one row per user per season (length, status, difficulty, champion, coins awarded)
+- `season_teams` — 30 AI + 1 human team per season (conf, OVR, W/L, PF/PA)
+- `season_games` — schedule + results (regular season + playoff, incl. series_game for best-of-7)
+- `player_season_stats` — running totals per player (pts/reb/ast/stl/blk/tov/fgm/fga/fg3m/fg3a/ftm/fta/min)
+- `season_trades` — trade window log
+
+**`lib/sim/season.ts`** (pure / deterministic)
+- `buildSeasonTeams()` — creates 30-team roster, replaces lowest same-conf team with human
+- `generateSchedule()` — seeded balanced round-robin with home/away assignment
+- `simulateGame()` — calls existing `decide()` + generates synthetic per-player box scores
+- `simulateSeason()` — applies all schedule slots, updates team W/L/PF/PA
+- `computeStandings()` — returns sorted East/West `StandingsRow[]`
+- `buildPlayInFull()` — sets up 7v8 / 9v10 per conference
+- `resolvePlayIn()` — fully sims the three play-in games per conference
+- `createSeries / simSeriesGame / simFullSeries` — best-of-7 with 2-2-1-1-1 home-court format
+- `buildPlayoffBracket / simPlayoffRound / buildNextRound` — 8-team playoff bracket per conference
+
+TypeScript: **0 errors** after all changes.
+
+### Next: S2
+`SeasonHubScreen` — pick length (Short 14 / Standard 28 / Full 82), pick difficulty, view projected standings, start button → triggers regular-season simulation and shows live standings.

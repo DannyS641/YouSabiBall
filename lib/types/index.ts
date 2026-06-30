@@ -159,6 +159,10 @@ export interface Save {
   recentRuns:       RunRecord[];
   // Phase 9
   bestPulls:        Card[];   // top 10 ever by OVR, sorted desc
+  // Phase 18
+  favoritePlayers:  Record<string, number>;  // player name → draft count
+  // Phase 21
+  seenTips: string[];
 }
 
 // ─── Badge ────────────────────────────────────────────────────────────────────

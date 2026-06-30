@@ -2,6 +2,7 @@
 
 import { useRef } from 'react';
 import { useGameStore, POS_COLORS, TIER_COLORS, lastName } from '@/store/gameStore';
+import TipBanner from '@/components/TipBanner';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { POSITIONS } from '@/lib/types';
 import { tierFor, DRAFT_TOKENS } from '@/lib/sim';
@@ -77,6 +78,12 @@ export default function DraftScreen() {
           <span style={{ fontSize: 11 }}>positions</span>
         </div>
       </div>
+
+      <TipBanner
+        id="draft"
+        icon="🎰"
+        text="Spin the wheel to draft a player for each position. Your first re-roll per draft is always free."
+      />
 
       {/* Active draft token banner */}
       {draftToken !== 'standard' && (
@@ -245,7 +252,7 @@ export default function DraftScreen() {
                 letterSpacing: '0.06em', cursor: spinning ? 'default' : 'pointer',
               }}
             >
-              {spinning ? 'SPINNING…' : `SPIN TO DRAFT${open[0] ? ` (${open[0]})` : ''}`}
+              {spinning ? 'SPINNING…' : filled.length === 0 ? '🎰 SPIN TO START' : `SPIN TO DRAFT${open[0] ? ` (${open[0]})` : ''}`}
             </button>
           </div>
         )}

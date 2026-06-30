@@ -1,6 +1,7 @@
 'use client';
 
 import { useGameStore, POS_COLORS, POS_SPOT_HALF, TIER_COLORS } from '@/store/gameStore';
+import TipBanner from '@/components/TipBanner';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { POSITIONS } from '@/lib/types';
 import { tierFor, getTeamProfile } from '@/lib/sim';
@@ -17,8 +18,10 @@ export default function CourtScreen() {
   const roster        = useGameStore(s => s.roster);
   const userName      = useGameStore(s => s.userName);
   const save          = useGameStore(s => s.save);
+  const teamNickname  = useGameStore(s => s.teamNickname);
   const difficulty    = useGameStore(s => s.difficulty) as Difficulty;
   const setDifficulty = useGameStore(s => s.setDifficulty);
+  const tradePosition = useGameStore(s => s.tradePosition);
   const pendingPerks  = useGameStore(s => s.pendingPerks);
   const openPerkModal = useGameStore(s => s.openPerkModal);
   const choosePerk    = useGameStore(s => s.choosePerk);
@@ -33,13 +36,26 @@ export default function CourtScreen() {
     <>
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '16px 14px 60px' : '28px 24px 60px' }}>
 
+      <TipBanner
+        id="court"
+        icon="⚙️"
+        text="Set your difficulty and pick a coaching perk before entering the playoffs. You can also swap players in the Trade Market."
+      />
+
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 12 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ color: '#E2622C', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {userName.toUpperCase()}'S STARTING FIVE
           </div>
-          <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 20 : 26 }}>On the floor</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 20 : 26 }}>On the floor</div>
+            {teamNickname && (
+              <div style={{ color: '#7A3FF2', fontSize: isMobile ? 11 : 13, fontWeight: 700, letterSpacing: '0.02em' }}>
+                {teamNickname}
+              </div>
+            )}
+          </div>
         </div>
         <button
           onClick={openPerkModal}
@@ -202,6 +218,52 @@ export default function CourtScreen() {
             </div>
             <div style={{ marginTop: 7, fontSize: 10, color: DIFF_INFO[difficulty].color, fontWeight: 600, textAlign: 'center' }}>
               {DIFF_INFO[difficulty].hint} · {DIFF_INFO[difficulty].mult} coin rewards
+            </div>
+          </div>
+
+          {/* Trade Market */}
+          <div style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: '1px solid #E5E7EB', flex: isMobile ? '1 1 100%' : undefined }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em' }}>TRADE MARKET</div>
+              <div style={{ color: '#6B7280', fontSize: 10, fontWeight: 600 }}>80🪙 per trade</div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {POSITIONS.map(pos => {
+                const card = roster[pos];
+                if (!card) return null;
+                const canAfford = (save?.coins ?? 0) >= 80;
+                return (
+                  <div key={pos} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      width: 28, height: 28, borderRadius: 6, flexShrink: 0,
+                      background: POS_COLORS[pos], display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 9,
+                    }}>{pos}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: '#111827', fontWeight: 600, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {card.name}
+                      </div>
+                      <div style={{ color: TIER_COLORS[tierFor(card.ovr)] ?? '#6B7280', fontSize: 10, fontWeight: 700 }}>
+                        OVR {card.ovr}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => tradePosition(pos)}
+                      disabled={!canAfford}
+                      style={{
+                        background: canAfford ? '#F3F4F6' : 'transparent',
+                        border: '1px solid #E5E7EB', borderRadius: 6,
+                        padding: '3px 8px', fontSize: 10, fontWeight: 700,
+                        color: canAfford ? '#374151' : '#D1D5DB',
+                        cursor: canAfford ? 'pointer' : 'default',
+                        whiteSpace: 'nowrap', flexShrink: 0,
+                      }}
+                    >
+                      Swap
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

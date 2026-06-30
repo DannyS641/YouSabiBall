@@ -29,6 +29,16 @@ export default function LiveGameScreen() {
   const progress = live.total > 0 ? (live.idx / live.total) * 100 : 0;
   const youWon   = live.done && live.targetA > live.targetB;
 
+  // Momentum: count team A vs team B among last 6 PBP entries
+  const recentPbp = live.pbp.slice(0, 6);
+  const aRecent   = recentPbp.filter(e => e.color === live.aColor).length;
+  const bRecent   = recentPbp.filter(e => e.color === live.bColor).length;
+  const momentum  = recentPbp.length > 0 ? (aRecent - bRecent) / recentPbp.length : 0; // -1..1
+  // Hot hand: last 3 plays all from same team
+  const last3 = live.pbp.slice(0, 3);
+  const aHot  = last3.length === 3 && last3.every(e => e.color === live.aColor);
+  const bHot  = last3.length === 3 && last3.every(e => e.color === live.bColor);
+
   return (
     <div style={{
       height: 'calc(100dvh - 60px)',
@@ -53,8 +63,11 @@ export default function LiveGameScreen() {
 
           {/* Team A */}
           <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {live.aName}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 4 }}>
+              <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 80 }}>
+                {live.aName}
+              </div>
+              {aHot && !live.done && <span style={{ fontSize: 13 }}>🔥</span>}
             </div>
             <div style={{ fontWeight: 900, fontSize: isMobile ? 40 : 52, lineHeight: 1, color: live.done ? (youWon ? live.aColor : '#4B5563') : live.aColor, transition: 'color 0.3s' }}>
               {live.done ? live.targetA : live.scoreA}
@@ -69,13 +82,29 @@ export default function LiveGameScreen() {
             {!live.done ? (
               <>
                 <div style={{ color: '#4B5563', fontSize: 13, fontWeight: 700 }}>vs</div>
-                <div style={{ width: '100%', height: 6, background: '#2A2D35', borderRadius: 3, overflow: 'hidden' }}>
+                {/* Game progress bar */}
+                <div style={{ width: '100%', height: 5, background: '#2A2D35', borderRadius: 3, overflow: 'hidden' }}>
                   <div style={{
                     height: '100%', width: `${progress}%`,
                     background: live.ballSide === 'A' ? live.aColor : live.bColor,
                     transition: 'width 0.12s linear, background 0.2s',
                   }} />
                 </div>
+                {/* Momentum bar */}
+                {recentPbp.length >= 3 && (
+                  <div style={{ width: '100%', position: 'relative', height: 4, background: '#2A2D35', borderRadius: 2, overflow: 'hidden' }}>
+                    {/* Left fill = team A momentum */}
+                    <div style={{
+                      position: 'absolute', left: 0, top: 0, bottom: 0,
+                      width: `${Math.round(50 + momentum * 50)}%`,
+                      background: `linear-gradient(to right, ${live.aColor}, ${live.aColor}88)`,
+                      transition: 'width 0.4s ease',
+                      borderRadius: 2,
+                    }} />
+                    {/* Center marker */}
+                    <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1.5, background: '#4B5563', transform: 'translateX(-50%)' }} />
+                  </div>
+                )}
                 <div style={{ color: '#4B5563', fontSize: 10 }}>{live.idx}/{live.total} plays</div>
               </>
             ) : (
@@ -85,8 +114,11 @@ export default function LiveGameScreen() {
 
           {/* Team B */}
           <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {live.bName}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 4 }}>
+              {bHot && !live.done && <span style={{ fontSize: 13 }}>🔥</span>}
+              <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 80 }}>
+                {live.bName}
+              </div>
             </div>
             <div style={{ fontWeight: 900, fontSize: isMobile ? 40 : 52, lineHeight: 1, color: live.done ? (!youWon ? live.bColor : '#4B5563') : live.bColor, transition: 'color 0.3s' }}>
               {live.done ? live.targetB : live.scoreB}

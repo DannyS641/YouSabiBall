@@ -15,6 +15,15 @@ export default function CollectionScreen() {
   const bestOvr    = save.stats.bestPull;
   const topTier    = bestOvr >= 98 ? 'Legend' : bestOvr >= 90 ? 'Diamond' : bestOvr >= 87 ? 'Gold' : bestOvr >= 84 ? 'Silver' : 'Bronze';
 
+  // Franchise player — most-drafted player ever
+  const favs    = save.favoritePlayers ?? {};
+  const favKeys = Object.keys(favs);
+  const franchiseName  = favKeys.length
+    ? favKeys.reduce((a, b) => favs[a] >= favs[b] ? a : b)
+    : null;
+  const franchiseCard  = franchiseName ? pulls.find(c => c.name === franchiseName) ?? null : null;
+  const franchiseCount = franchiseName ? favs[franchiseName] : 0;
+
   return (
     <div style={{ maxWidth: 780, margin: '0 auto', padding: isMobile ? '20px 14px 80px' : '28px 24px 80px' }}>
 
@@ -29,7 +38,7 @@ export default function CollectionScreen() {
       {/* Summary strip */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
+        gridTemplateColumns: 'repeat(4, 1fr)',
         gap: 10, marginBottom: 24,
       }}>
         <StatTile label="TOTAL PULLS" value={String(totalPulls)} />
@@ -39,7 +48,43 @@ export default function CollectionScreen() {
           color={bestOvr ? (TIER_COLORS[topTier as keyof typeof TIER_COLORS] ?? '#111827') : '#9CA3AF'}
         />
         <StatTile label="VAULT SIZE" value={`${pulls.length}/10`} />
+        <StatTile label="DRAFTED" value={franchiseName ? `${franchiseCount}×` : '—'} color="#7A3FF2" />
       </div>
+
+      {/* Franchise player banner */}
+      {franchiseName && (
+        <div style={{
+          background: 'linear-gradient(135deg, #EDE9FE, #F5F3FF)',
+          border: '2px solid #C4B5FD',
+          borderRadius: 14, padding: isMobile ? '14px 16px' : '18px 22px',
+          marginBottom: 20,
+          display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 18,
+        }}>
+          <div style={{ fontSize: isMobile ? 28 : 36, flexShrink: 0 }}>🏆</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: '#7A3FF2', fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', marginBottom: 4 }}>
+              FRANCHISE PLAYER · DRAFTED {franchiseCount}×
+            </div>
+            <div style={{ color: '#111827', fontWeight: 900, fontSize: isMobile ? 18 : 22, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {franchiseName}
+            </div>
+            {franchiseCard && (
+              <div style={{ color: '#6B7280', fontSize: 12, marginTop: 3 }}>
+                {franchiseCard.pos} · {franchiseCard.team} · OVR {franchiseCard.ovr}
+              </div>
+            )}
+          </div>
+          <div style={{
+            background: '#7A3FF2', color: '#fff',
+            fontWeight: 900, fontSize: isMobile ? 22 : 28, lineHeight: 1,
+            width: isMobile ? 52 : 64, height: isMobile ? 52 : 64,
+            borderRadius: isMobile ? 12 : 14,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            {franchiseCard?.ovr ?? '?'}
+          </div>
+        </div>
+      )}
 
       {/* Pull cards */}
       {pulls.length === 0 ? (

@@ -18,6 +18,7 @@ export default function Navbar() {
   const viewHistory        = useGameStore(s => s.viewHistory);
   const viewShop           = useGameStore(s => s.viewShop);
   const viewCollection     = useGameStore(s => s.viewCollection);
+  const viewSettings       = useGameStore(s => s.viewSettings);
   const goHome             = useGameStore(s => s.goHome);
   const logout             = useGameStore(s => s.logout);
 
@@ -141,6 +142,7 @@ export default function Navbar() {
             <NavBtn label="Challenges"  onClick={viewChallenges} badge={challengesLeft || undefined} />
             <NavBtn label="Friends"     onClick={viewFriends}    badge={friendsBadge   || undefined} />
             {phase !== 'leaderboard' && <NavBtn label="Leaderboard" onClick={viewLb} />}
+            <NavBtn label="Settings"    onClick={viewSettings} />
             {authUser && (
               <button onClick={handleLogout} style={logoutBtn}>Log out</button>
             )}
@@ -214,6 +216,7 @@ export default function Navbar() {
             <NavBtn label="⚡  Challenges"   onClick={viewChallenges} badge={challengesLeft || undefined} />
             <NavBtn label="👥  Friends"      onClick={viewFriends}    badge={friendsBadge   || undefined} />
             <NavBtn label="🏆  Leaderboard"  onClick={viewLb} />
+            <NavBtn label="⚙️  Settings"     onClick={viewSettings} />
             {authUser && (
               <button onClick={handleLogout} style={{ ...logoutBtn, width: '100%', textAlign: 'left', padding: '12px 16px', borderRadius: 10, fontSize: 15, marginTop: 4 }}>
                 🚪  Log out

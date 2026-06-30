@@ -41,7 +41,7 @@ export type { EarnedBadge, DraftTokenTier, PackType } from './economy';
 
 export { BADGES }              from './badges';
 
-export { getTeamProfile }      from './teamProfile';
+export { getTeamProfile, generateNickname } from './teamProfile';
 
 export { PERK_POOL, drawPerks } from './perks';
 export type { Perk }            from './perks';
@@ -60,3 +60,35 @@ export {
   claimSeasonReward,
 } from './challenges';
 export type { ChallengeEvent, ChallengeAward } from './challenges';
+
+export {
+  SEASON_GAME_COUNTS,
+  NBA_FRANCHISES,
+  buildSeasonTeams,
+  generateSchedule,
+  simulateGame,
+  simulateSeason,
+  computeStandings,
+  buildPlayInFull,
+  simulatePlayInGame,
+  resolvePlayIn,
+  createSeries,
+  simSeriesGame,
+  simFullSeries,
+  buildPlayoffBracket,
+  simPlayoffRound,
+  buildNextRound,
+} from './season';
+export type {
+  SeasonLength,
+  SeasonTeam,
+  GameSlot,
+  PlayerBoxScore,
+  GameResult,
+  StandingsRow,
+  PlayInBracket,
+  PlayInConf,
+  SeriesState,
+  PlayoffRound,
+  PlayoffBracket,
+} from './season';

@@ -11,10 +11,11 @@ export default function HomeScreen() {
   const difficulty  = useGameStore(s => s.difficulty);
   const leaderboard = useGameStore(s => s.leaderboard);
   const lastPull    = useGameStore(s => s.lastPull);
-  const startRun    = useGameStore(s => s.startNewRun);
-  const claimStreak = useGameStore(s => s.claimStreak);
-  const enterLobby  = useGameStore(s => s.enterLobby);
-  const viewHistory = useGameStore(s => s.viewHistory);
+  const startRun      = useGameStore(s => s.startNewRun);
+  const claimStreak   = useGameStore(s => s.claimStreak);
+  const enterLobby    = useGameStore(s => s.enterLobby);
+  const viewHistory   = useGameStore(s => s.viewHistory);
+  const viewSettings  = useGameStore(s => s.viewSettings);
 
   const { isMobile, isTablet } = useBreakpoint();
 
@@ -108,6 +109,34 @@ export default function HomeScreen() {
         />
         <StatCard label="BADGES" value={`${earned}/${badgeTotal}`} sub={`${save.stats.titles} title${save.stats.titles !== 1 ? 's' : ''}`} />
       </div>
+
+      {/* First-run welcome */}
+      {save.stats.runs === 0 && (
+        <div style={{
+          background: '#F5F3FF', border: '1px solid #C4B5FD',
+          borderRadius: 12, padding: '14px 16px',
+          marginBottom: 14,
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <span style={{ fontSize: 24, flexShrink: 0 }}>👋</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: '#111827', fontWeight: 700, fontSize: 14 }}>Welcome to YOU SABI BALL!</div>
+            <div style={{ color: '#6B7280', fontSize: 12, marginTop: 2 }}>
+              Draft 5 players, enter the playoffs, and become NBA Champion.
+            </div>
+          </div>
+          <button
+            onClick={viewSettings}
+            style={{
+              background: 'none', border: '1px solid #C4B5FD', borderRadius: 8,
+              padding: '6px 10px', color: '#7A3FF2', fontSize: 11, fontWeight: 700,
+              cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+            }}
+          >
+            How to Play
+          </button>
+        </div>
+      )}
 
       {/* Daily Reward */}
       <div style={card}>

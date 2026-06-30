@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import { useGameStore, fmt } from '@/store/gameStore';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import BracketTree from '@/components/BracketTree';
+import { roundMatches } from '@/lib/sim';
 import type { Upgrade } from '@/lib/sim';
+import TipBanner from '@/components/TipBanner';
 
 type Difficulty = 'Rookie' | 'Pro' | 'Hall of Fame';
 const DIFF_COLORS: Record<Difficulty, string> = {
@@ -27,6 +29,7 @@ export default function BracketScreen() {
   const startNewRun       = useGameStore(s => s.startNewRun);
   const showHighlightCard = useGameStore(s => s.showHighlightCard);
   const activePerk        = useGameStore(s => s.activePerk);
+  const teamNickname      = useGameStore(s => s.teamNickname);
   const difficulty        = useGameStore(s => s.difficulty) as Difficulty;
   const pendingUpgrades   = useGameStore(s => s.pendingUpgrades);
   const activeUpgrades    = useGameStore(s => s.activeUpgrades);
@@ -36,6 +39,20 @@ export default function BracketScreen() {
   const { isMobile } = useBreakpoint();
 
   const done = simStep >= 4;
+
+  // Derive next human match opponent for scouting
+  const humanRating = bracket?.teams.find(t => t.isHuman)?.rating ?? 0;
+  let scoutOpp: { name: string; rating: number } | null = null;
+  if (bracket && !done) {
+    const hm = roundMatches(bracket, simStep).find(m => m.a?.isHuman || m.b?.isHuman);
+    if (hm && !hm.result) {
+      const opp = hm.a?.isHuman ? hm.b : hm.a;
+      if (opp) scoutOpp = { name: opp.name, rating: opp.rating };
+    }
+  }
+  const winPct = scoutOpp && humanRating
+    ? Math.round((humanRating / (humanRating + scoutOpp.rating)) * 100)
+    : null;
 
   // When run ends, show champion popup first; highlight card follows on dismiss
   useEffect(() => {
@@ -170,6 +187,13 @@ export default function BracketScreen() {
         gap: isMobile ? 8 : 0,
       }}>
 
+        {/* ── Tutorial tip ── */}
+        <TipBanner
+          id="bracket"
+          icon="🏆"
+          text="Win 4 rounds to become NBA Champion. Watch your game live or quick-sim. After each win you'll get a free upgrade boost."
+        />
+
         {/* ── Header ── */}
         <div style={{ flexShrink: 0, marginBottom: isMobile ? 0 : 16 }}>
           {/* Top row: title + badge */}
@@ -196,6 +220,11 @@ export default function BracketScreen() {
               )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 20 : 24 }}>NBA Playoffs</div>
+            {teamNickname && (
+              <div style={{ color: '#9CA3AF', fontSize: isMobile ? 11 : 12, fontWeight: 600 }}>
+                · {teamNickname}
+              </div>
+            )}
             {/* Difficulty badge */}
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -311,6 +340,79 @@ export default function BracketScreen() {
           </div>
         )}
 
+        {/* ── Run recap (round-by-round when done) ── */}
+        {done && bracket && (() => {
+          const rounds = getHumanRounds(bracket);
+          if (!rounds.length) return null;
+          return (
+            <div style={{
+              flexShrink: 0,
+              background: '#fff', borderRadius: 12,
+              border: '1px solid #E5E7EB',
+              padding: isMobile ? '10px 14px' : '14px 18px',
+            }}>
+              <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 10 }}>
+                RUN RECAP
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {rounds.map(r => (
+                  <div key={r.round} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                      background: r.won ? '#22C55E' : '#EF4444',
+                    }} />
+                    <div style={{ color: '#9CA3AF', fontSize: isMobile ? 10 : 11, fontWeight: 600, flexShrink: 0, minWidth: isMobile ? 72 : 100 }}>
+                      {r.round}
+                    </div>
+                    <div style={{ color: '#374151', fontSize: isMobile ? 11 : 12, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      vs. {r.opp}
+                    </div>
+                    <div style={{
+                      fontSize: isMobile ? 11 : 12, fontWeight: 800, flexShrink: 0,
+                      color: r.won ? '#16A34A' : '#DC2626',
+                    }}>
+                      {r.won ? 'W' : 'L'} {r.humanScore}–{r.oppScore}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── Scouting report ── */}
+        {scoutOpp && winPct !== null && (
+          <div style={{
+            flexShrink: 0,
+            background: '#fff', borderRadius: 12,
+            border: '1px solid #E5E7EB',
+            padding: isMobile ? '10px 14px' : '12px 18px',
+            display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 16,
+          }}>
+            <div style={{ fontSize: isMobile ? 18 : 22, flexShrink: 0 }}>🔭</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 2 }}>NEXT OPPONENT</div>
+              <div style={{ color: '#111827', fontWeight: 700, fontSize: isMobile ? 13 : 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {scoutOpp.name}
+              </div>
+              <div style={{ color: '#6B7280', fontSize: 11, marginTop: 1 }}>OVR {scoutOpp.rating} · {
+                winPct >= 65 ? 'You are the heavy favorite' :
+                winPct >= 55 ? 'Slight edge in your favor' :
+                winPct >= 45 ? 'Even matchup' :
+                winPct >= 35 ? 'Slight underdog' :
+                'Tough test ahead'
+              }</div>
+            </div>
+            {/* Win odds bar */}
+            <div style={{ flexShrink: 0, textAlign: 'center', minWidth: isMobile ? 52 : 64 }}>
+              <div style={{ color: winPct >= 50 ? '#16A34A' : '#DC2626', fontWeight: 900, fontSize: isMobile ? 18 : 22, lineHeight: 1 }}>
+                {winPct}%
+              </div>
+              <div style={{ color: '#9CA3AF', fontSize: 9, fontWeight: 600, marginTop: 2 }}>win odds</div>
+            </div>
+          </div>
+        )}
+
         {/* ── Bracket card – fills remaining space ── */}
         {bracket && (
           <div style={{
@@ -334,8 +436,34 @@ export default function BracketScreen() {
           onChoose={chooseUpgrade}
         />
       )}
+
     </>
   );
+}
+
+// ─── Run recap helper ────────────────────────────────────────────────────────
+
+import type { Bracket as BracketType } from '@/lib/types';
+
+function getHumanRounds(bracket: BracketType) {
+  const NAMES = ['First Round', 'Conf Semis', 'Conf Finals', 'NBA Finals'];
+  const out: { round: string; opp: string; humanScore: number; oppScore: number; won: boolean }[] = [];
+  for (let step = 0; step < 4; step++) {
+    const matches = roundMatches(bracket, step);
+    const hm = matches.find(m => m.a?.isHuman || m.b?.isHuman);
+    if (!hm || !hm.result) break;
+    const humanIsA = hm.a?.isHuman ?? false;
+    const opp      = humanIsA ? hm.b : hm.a;
+    out.push({
+      round:      NAMES[step],
+      opp:        opp?.name ?? '?',
+      humanScore: humanIsA ? hm.result.sa : hm.result.sb,
+      oppScore:   humanIsA ? hm.result.sb : hm.result.sa,
+      won:        hm.result.winner.isHuman,
+    });
+    if (!hm.result.winner.isHuman) break;
+  }
+  return out;
 }
 
 // ─── Between-round upgrade modal ─────────────────────────────────────────────

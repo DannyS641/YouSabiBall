@@ -21,6 +21,7 @@ import {
   DRAFT_TOKENS, PACKS,
   drawPerks,
   drawUpgrades,
+  generateNickname,
 } from '@/lib/sim';
 import type { GameEvent, EarnedBadge, ChallengeAward, DraftTokenTier, PackType, Perk, Upgrade } from '@/lib/sim';
 import { recordRunServer, syncSave, fetchLeaderboard } from '@/app/actions/game';
@@ -37,7 +38,7 @@ const LB_KEY      = 'hardwood_lb_v2';
 const PROFILE_KEY = 'hardwood_profiles_v2';
 const SAVE_KEY    = 'hardwood_save_v1';
 
-export type Phase = 'register' | 'home' | 'draft' | 'court' | 'bracket' | 'game' | 'leaderboard' | 'challenges' | 'lobby' | 'mp_room' | 'friends' | 'history' | 'shop' | 'collection';
+export type Phase = 'register' | 'home' | 'draft' | 'court' | 'bracket' | 'game' | 'leaderboard' | 'challenges' | 'lobby' | 'mp_room' | 'friends' | 'history' | 'shop' | 'collection' | 'settings';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -81,6 +82,8 @@ function loadSave(name: string): Save {
       dailyChallenges: x.dailyChallenges ?? [],
       recentRuns:      x.recentRuns ?? [],
       bestPulls:       x.bestPulls ?? [],
+      favoritePlayers: x.favoritePlayers ?? {},
+      seenTips:        x.seenTips ?? [],
     };
   } catch { return defaultSave(); }
 }
@@ -139,6 +142,7 @@ interface GameState {
   pointsEarned: number;
   coinsEarned:  number;
   runLabel:     string;
+  teamNickname: string;
 
   // Live game
   live:        LiveGame | null;
@@ -212,9 +216,12 @@ interface GameState {
   viewHistory:         () => void;
   viewShop:            () => void;
   viewCollection:      () => void;
+  viewSettings:        () => void;
   buyDraftToken:       (tier: 'gold' | 'diamond') => void;
   openPack:            (packType: PackType) => void;
   closePack:           () => void;
+  tradePosition:       (pos: Position) => void;
+  dismissTip:          (id: string) => void;
   openPerkModal:       () => void;
   choosePerk:          (perk: Perk | null) => void;  // null = skip
   chooseUpgrade:       (upgrade: Upgrade | null) => void; // null = skip
@@ -238,7 +245,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   pendingPerks: [], activePerk: null,
   pendingUpgrades: [], activeUpgrades: [],
   bracket: null, simStep: 0, champion: null, mvp: '',
-  pointsEarned: 0, coinsEarned: 0, runLabel: '',
+  pointsEarned: 0, coinsEarned: 0, runLabel: '', teamNickname: '',
   live: null, _events: [], _liveHuman: null, _liveOpp: null,
   _liveRound: 0, _liveMatch: null,
   _diffBias: 0, _diffMult: 1, _recorded: false,
@@ -281,7 +288,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     roster: emptyRoster(), available: [...PLAYERS], reelItems: [],
     spinning: false, lastPick: null, rerollsUsed: 0,
     bracket: null, simStep: 0, champion: null, mvp: '',
-    pointsEarned: 0, coinsEarned: 0, runLabel: '', live: null, _recorded: false,
+    pointsEarned: 0, coinsEarned: 0, runLabel: '', teamNickname: '', live: null, _recorded: false,
     activeChallengeId: null, activeChallengeTarget: null,
     pendingPerks: [], activePerk: null,
     pendingUpgrades: [], activeUpgrades: [],
@@ -327,7 +334,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       const merged    = [...existing.filter(c => c.name !== winner.name), winner]
         .sort((a, b) => b.ovr - a.ovr)
         .slice(0, 10);
-      const withPulls = { ...save, bestPulls: merged };
+      const favs      = { ...(save.favoritePlayers ?? {}) };
+      favs[winner.name] = (favs[winner.name] ?? 0) + 1;
+      const withPulls = { ...save, bestPulls: merged, favoritePlayers: favs };
 
       if (POSITIONS.every(p => newRoster[p])) {
         const cards     = POSITIONS.map(p => newRoster[p]!);
@@ -337,7 +346,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const award     = applyChallengeEvent(withPulls, { type: 'draft_complete', teamAvg, topOvr, goldCount });
         const { save: saved, newly } = checkBadges(award.save);
         persistSave(userName, saved);
-        set({ save: saved, challengeAward: award.completedIds.length ? award : null, badgeToast: newly });
+        set({ save: saved, challengeAward: award.completedIds.length ? award : null, badgeToast: newly, teamNickname: generateNickname(newRoster) });
       } else {
         persistSave(userName, withPulls);
         set({ save: withPulls });
@@ -371,6 +380,39 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
 
     get().spin(onAnimate);
+  },
+
+  // ── Tutorial tip dismiss (Phase 21) ─────────────────────────────────────────
+  dismissTip: (id) => {
+    const { save, userName } = get();
+    if (!save) return;
+    const seen = [...(save.seenTips ?? [])];
+    if (seen.includes(id)) return;
+    seen.push(id);
+    const sv = clone(save);
+    sv.seenTips = seen;
+    persistSave(userName, sv);
+    set({ save: sv });
+  },
+
+  // ── Post-draft trade ────────────────────────────────────────────────────────
+  tradePosition: (pos) => {
+    const { roster, available, save, userName } = get();
+    const TRADE_COST = 80;
+    if (!save || save.coins < TRADE_COST) return;
+    const prev = roster[pos];
+    if (!prev) return;
+
+    const pool = available.filter(c => c.pos === pos);
+    if (!pool.length) return;
+
+    const picked = pool[Math.floor(Math.random() * pool.length)];
+    const newRoster   = { ...roster, [pos]: picked };
+    const newAvailable = [...available.filter(c => c !== picked), prev];
+    let sv = clone(save);
+    sv.coins -= TRADE_COST;
+    persistSave(userName, sv);
+    set({ roster: newRoster, available: newAvailable, save: sv, teamNickname: generateNickname(newRoster) });
   },
 
   viewTeam: () => set({ phase: 'court' }),
@@ -680,6 +722,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   viewHistory:  () => set(s => ({ prevPhase: s.phase, phase: 'history' })),
   viewShop:       () => set(s => ({ prevPhase: s.phase, phase: 'shop' })),
   viewCollection: () => set(s => ({ prevPhase: s.phase, phase: 'collection' })),
+  viewSettings:   () => set(s => ({ prevPhase: s.phase, phase: 'settings' })),
 
   buyDraftToken: (tier) => {
     const { save, userName, draftToken } = get();
@@ -817,6 +860,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       difficulty: get().difficulty,
     };
     sv.recentRuns = [runRec, ...(sv.recentRuns ?? [])].slice(0, 30);
+
     const { save: saved, newly } = checkBadges(sv);
     persistSave(userName, saved);
 
@@ -826,10 +870,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (ca.completedIds.length > 0) persistSave(userName, savedFinal);
 
     set({
-      leaderboard:    lb,
-      pointsEarned:   rec.pointsEarned,
-      coinsEarned:    rec.coinsEarned,
-      runLabel:       rec.runLabel,
+      leaderboard:      lb,
+      pointsEarned:     rec.pointsEarned,
+      coinsEarned:      rec.coinsEarned,
+      runLabel:         rec.runLabel,
       save:           ca.completedIds.length ? savedFinal : saved,
       badgeToast:     ca.completedIds.length ? newlyFinal : newly,
       challengeAward: ca.completedIds.length ? ca : null,

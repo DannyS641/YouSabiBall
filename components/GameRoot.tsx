@@ -20,6 +20,7 @@ import FriendsScreen           from '@/components/screens/FriendsScreen';
 import HistoryScreen            from '@/components/screens/HistoryScreen';
 import ShopScreen              from '@/components/screens/ShopScreen';
 import CollectionScreen        from '@/components/screens/CollectionScreen';
+import SettingsScreen          from '@/components/screens/SettingsScreen';
 
 export default function GameRoot() {
   const phase = useGameStore(s => s.phase);
@@ -46,6 +47,7 @@ export default function GameRoot() {
         {phase === 'history'     && <HistoryScreen />}
         {phase === 'shop'        && <ShopScreen />}
         {phase === 'collection'  && <CollectionScreen />}
+        {phase === 'settings'    && <SettingsScreen />}
       </div>
       <RewardToast />
       <HighlightCard />
