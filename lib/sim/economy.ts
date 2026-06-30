@@ -1,4 +1,4 @@
-import type { Save, Stats, Tier, DayReward, StreakNode } from '../types';
+import type { Save, Stats, Tier, DayReward, StreakNode, RunRecord } from '../types';
 import { BADGES } from './badges';
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
@@ -17,6 +17,7 @@ export function defaultSave(): Save {
     coins: 250, streak: 0, lastClaim: null, badges: [], stats: defaultStats(),
     dailyChallenges: [],
     seasonPass: { season: 1, xp: 0, level: 1, claimed: [] },
+    recentRuns: [],
   };
 }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useGameStore } from '@/store/gameStore';
+import { useBreakpoint } from '@/hooks/useBreakpoint';
 import {
   CHALLENGE_DEFS, SEASON_REWARDS, XP_PER_LEVEL, MAX_LEVEL,
   getDailyChallenges,
@@ -22,6 +23,7 @@ export default function ChallengesScreen() {
   const save             = useGameStore(s => s.save);
   const goHome           = useGameStore(s => s.goHome);
   const claimSeasonLevel = useGameStore(s => s.claimSeasonLevel);
+  const { isMobile } = useBreakpoint();
 
   if (!save) return null;
 
@@ -36,10 +38,10 @@ export default function ChallengesScreen() {
   const claimed   = new Set(sp.claimed);
 
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', padding: '28px 24px 60px' }}>
+    <div style={{ maxWidth: 860, margin: '0 auto', padding: isMobile ? '16px 14px 60px' : '28px 24px 60px' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -51,21 +53,21 @@ export default function ChallengesScreen() {
               DAILY CHALLENGES
             </span>
           </div>
-          <div style={{ color: '#111827', fontWeight: 800, fontSize: 26 }}>Challenges</div>
+          <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 22 : 26 }}>Challenges</div>
         </div>
         <button onClick={goHome} style={ghostBtn}>← Back</button>
       </div>
 
       {/* Daily Challenges */}
-      <div style={card}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div style={{ color: '#111827', fontWeight: 700, fontSize: 16 }}>Today's Challenges</div>
+      <div style={isMobile ? mobileCard : card}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ color: '#111827', fontWeight: 700, fontSize: 15 }}>Today's Challenges</div>
           <div style={{ color: '#9CA3AF', fontSize: 12 }}>
-            {doneSet.size} / {dailies.length} complete
+            {doneSet.size} / {dailies.length} done
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {dailies.map(def => {
             const done = doneSet.has(def.id);
             const catColor = CATEGORY_COLORS[def.category] ?? '#9CA3AF';
@@ -73,8 +75,8 @@ export default function ChallengesScreen() {
               <div
                 key={def.id}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 14,
-                  padding: '14px 16px',
+                  display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14,
+                  padding: isMobile ? '10px 12px' : '14px 16px',
                   background: done ? '#F0FDF4' : '#F9FAFB',
                   border: `1px solid ${done ? '#BBF7D0' : '#E5E7EB'}`,
                   borderRadius: 12,
@@ -82,14 +84,15 @@ export default function ChallengesScreen() {
               >
                 {/* Category badge */}
                 <div style={{
-                  width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+                  width: isMobile ? 32 : 40, height: isMobile ? 32 : 40,
+                  borderRadius: isMobile ? 8 : 10, flexShrink: 0,
                   background: done ? '#BBF7D0' : catColor + '15',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
                   {done ? (
-                    <span style={{ fontSize: 18 }}>✓</span>
+                    <span style={{ fontSize: isMobile ? 14 : 18 }}>✓</span>
                   ) : (
-                    <span style={{ color: catColor, fontSize: 10, fontWeight: 800, letterSpacing: '0.04em' }}>
+                    <span style={{ color: catColor, fontSize: 9, fontWeight: 800, letterSpacing: '0.04em' }}>
                       {CATEGORY_LABELS[def.category]}
                     </span>
                   )}
@@ -99,20 +102,23 @@ export default function ChallengesScreen() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
                     color: done ? '#15803D' : '#111827',
-                    fontWeight: 700, fontSize: 14,
+                    fontWeight: 700, fontSize: isMobile ? 13 : 14,
                     textDecoration: done ? 'line-through' : 'none',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>
                     {def.name}
                   </div>
-                  <div style={{ color: '#6B7280', fontSize: 12, marginTop: 2 }}>{def.desc}</div>
+                  <div style={{ color: '#6B7280', fontSize: isMobile ? 11 : 12, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {def.desc}
+                  </div>
                 </div>
 
                 {/* Rewards */}
                 <div style={{ flexShrink: 0, textAlign: 'right' }}>
-                  <div style={{ color: '#92400E', fontSize: 12, fontWeight: 700 }}>
+                  <div style={{ color: '#92400E', fontSize: 11, fontWeight: 700 }}>
                     +{def.coins} 🪙
                   </div>
-                  <div style={{ color: '#7A3FF2', fontSize: 11, fontWeight: 600, marginTop: 2 }}>
+                  <div style={{ color: '#7A3FF2', fontSize: 10, fontWeight: 600, marginTop: 1 }}>
                     +{def.xp} XP
                   </div>
                 </div>
@@ -123,22 +129,22 @@ export default function ChallengesScreen() {
       </div>
 
       {/* Season Pass */}
-      <div style={{ ...card, marginTop: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+      <div style={{ ...(isMobile ? mobileCard : card), marginTop: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
           <div>
-            <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 4 }}>
+            <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 3 }}>
               SEASON {sp.season}
             </div>
-            <div style={{ color: '#111827', fontWeight: 700, fontSize: 16 }}>Season Pass</div>
+            <div style={{ color: '#111827', fontWeight: 700, fontSize: 15 }}>Season Pass</div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ color: '#7A3FF2', fontWeight: 800, fontSize: 22 }}>Lvl {sp.level}</div>
+            <div style={{ color: '#7A3FF2', fontWeight: 800, fontSize: 20 }}>Lvl {sp.level}</div>
             <div style={{ color: '#9CA3AF', fontSize: 11 }}>{sp.xp} / {XP_PER_LEVEL} XP</div>
           </div>
         </div>
 
         {/* XP Bar */}
-        <div style={{ height: 8, background: '#F3F4F6', borderRadius: 4, overflow: 'hidden', marginBottom: 20 }}>
+        <div style={{ height: 7, background: '#F3F4F6', borderRadius: 4, overflow: 'hidden', marginBottom: 16 }}>
           <div style={{
             height: '100%', width: `${xpPct}%`,
             background: 'linear-gradient(90deg, #7A3FF2, #A97CF8)',
@@ -157,47 +163,39 @@ export default function ChallengesScreen() {
                 key={rw.level}
                 style={{
                   flexShrink: 0,
-                  width: 90,
+                  width: isMobile ? 76 : 90,
                   background: isClaimed ? '#F5F3FF' : reached ? '#FFF7ED' : '#F9FAFB',
                   border: `1px solid ${isClaimed ? '#DDD6FE' : reached ? '#FDE68A' : '#E5E7EB'}`,
                   borderRadius: 10,
-                  padding: '10px 8px',
+                  padding: '8px 6px',
                   textAlign: 'center',
                 }}
               >
-                <div style={{
-                  color: '#9CA3AF', fontSize: 9, fontWeight: 700,
-                  letterSpacing: '0.08em', marginBottom: 6,
-                }}>
+                <div style={{ color: '#9CA3AF', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 5 }}>
                   LVL {rw.level}
                 </div>
-                <div style={{ fontSize: isClaimed ? 18 : 14, marginBottom: 4 }}>
+                <div style={{ fontSize: isClaimed ? 16 : 13, marginBottom: 3 }}>
                   {isClaimed ? '✓' : rw.badge ? '👑' : '🪙'}
                 </div>
-                <div style={{
-                  color: isClaimed ? '#7A3FF2' : '#374151',
-                  fontSize: 10, fontWeight: 700, lineHeight: 1.2,
-                }}>
+                <div style={{ color: isClaimed ? '#7A3FF2' : '#374151', fontSize: 9, fontWeight: 700, lineHeight: 1.2 }}>
                   {rw.label}
                 </div>
                 {canClaim && (
                   <button
                     onClick={() => claimSeasonLevel(rw.level)}
                     style={{
-                      marginTop: 8, width: '100%',
-                      padding: '4px 0',
+                      marginTop: 7, width: '100%',
+                      padding: '3px 0',
                       background: '#E2622C', border: 'none', borderRadius: 4,
                       color: '#fff', fontSize: 9, fontWeight: 800,
-                      cursor: 'pointer', letterSpacing: '0.04em',
+                      cursor: 'pointer',
                     }}
                   >
                     CLAIM
                   </button>
                 )}
                 {!reached && (
-                  <div style={{ color: '#D1D5DB', fontSize: 9, marginTop: 6 }}>
-                    Lvl {rw.level} required
-                  </div>
+                  <div style={{ color: '#D1D5DB', fontSize: 9, marginTop: 5 }}>Lvl {rw.level}</div>
                 )}
               </div>
             );
@@ -206,11 +204,15 @@ export default function ChallengesScreen() {
       </div>
 
       {/* All challenges reference */}
-      <div style={{ ...card, marginTop: 16 }}>
-        <div style={{ color: '#111827', fontWeight: 700, fontSize: 16, marginBottom: 12 }}>
+      <div style={{ ...(isMobile ? mobileCard : card), marginTop: 12 }}>
+        <div style={{ color: '#111827', fontWeight: 700, fontSize: 15, marginBottom: 12 }}>
           All Challenges
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+          gap: 8,
+        }}>
           {CHALLENGE_DEFS.map(def => {
             const catColor = CATEGORY_COLORS[def.category] ?? '#9CA3AF';
             return (
@@ -230,11 +232,11 @@ export default function ChallengesScreen() {
                   </span>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: '#374151', fontWeight: 700, fontSize: 12 }}>{def.name}</div>
-                  <div style={{ color: '#9CA3AF', fontSize: 10, marginTop: 1 }}>{def.desc}</div>
+                  <div style={{ color: '#374151', fontWeight: 700, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{def.name}</div>
+                  <div style={{ color: '#9CA3AF', fontSize: 10, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{def.desc}</div>
                 </div>
                 <div style={{ flexShrink: 0 }}>
-                  <div style={{ color: '#9CA3AF', fontSize: 10 }}>+{def.xp} XP</div>
+                  <div style={{ color: '#9CA3AF', fontSize: 10, whiteSpace: 'nowrap' }}>+{def.xp} XP</div>
                 </div>
               </div>
             );
@@ -246,11 +248,15 @@ export default function ChallengesScreen() {
 }
 
 const card: React.CSSProperties = {
-  background: '#FFFFFF', borderRadius: 14, padding: '20px 20px',
+  background: '#FFFFFF', borderRadius: 14, padding: '20px',
+  border: '1px solid #E5E7EB',
+};
+const mobileCard: React.CSSProperties = {
+  background: '#FFFFFF', borderRadius: 14, padding: '14px',
   border: '1px solid #E5E7EB',
 };
 const ghostBtn: React.CSSProperties = {
-  padding: '8px 16px',
+  padding: '7px 14px', flexShrink: 0,
   background: 'transparent',
   border: '1px solid #E5E7EB', borderRadius: 8,
   color: '#374151', fontSize: 13, fontWeight: 600,

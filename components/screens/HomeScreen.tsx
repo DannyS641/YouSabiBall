@@ -14,6 +14,7 @@ export default function HomeScreen() {
   const startRun    = useGameStore(s => s.startNewRun);
   const claimStreak = useGameStore(s => s.claimStreak);
   const enterLobby  = useGameStore(s => s.enterLobby);
+  const viewHistory = useGameStore(s => s.viewHistory);
 
   const { isMobile, isTablet } = useBreakpoint();
 
@@ -46,11 +47,11 @@ export default function HomeScreen() {
           }}>
             {(userName[0] || '?').toUpperCase()}
           </div>
-          <div>
-            <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 3 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 3, whiteSpace: 'nowrap' }}>
               {DIFF_LABEL[difficulty]} · GENERAL MANAGER
             </div>
-            <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 20 : 26 }}>{userName}</div>
+            <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 18 : 26, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName}</div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -95,16 +96,17 @@ export default function HomeScreen() {
           sub={total > 0 ? `of ${total} GMs` : ''}
         />
         <StatCard
-          label="TITLES"
-          value={String(save.stats.titles)}
-          sub={`${save.stats.runs} run${save.stats.runs !== 1 ? 's' : ''} · best ${
-            save.stats.bestRound >= 4 ? 'Champion' :
+          label="RUNS"
+          value={String(save.stats.runs)}
+          sub={`best: ${
+            save.stats.bestRound >= 4 ? 'Champion 🏆' :
             save.stats.bestRound === 3 ? 'Finals' :
             save.stats.bestRound === 2 ? 'Conf Finals' :
             save.stats.bestRound === 1 ? 'Conf Semis' : '—'
           }`}
+          onClick={viewHistory}
         />
-        <StatCard label="BADGES" value={`${earned}/${badgeTotal}`} sub="" />
+        <StatCard label="BADGES" value={`${earned}/${badgeTotal}`} sub={`${save.stats.titles} title${save.stats.titles !== 1 ? 's' : ''}`} />
       </div>
 
       {/* Daily Reward */}
@@ -180,44 +182,48 @@ export default function HomeScreen() {
       </div>
 
       {/* Achievements */}
-      <div style={{ ...card, marginTop: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+      <div style={{ ...card, marginTop: 14, padding: isMobile ? '14px 12px' : '20px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={sectionTitle}>Achievements</div>
           <div style={{ color: '#9CA3AF', fontSize: 13, fontWeight: 600 }}>{earned} / {badgeTotal}</div>
         </div>
         <div style={{
           display: 'grid',
           gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : isTablet ? 'repeat(3, 1fr)' : 'repeat(5, 1fr)',
-          gap: 8,
+          gap: isMobile ? 6 : 8,
         }}>
           {BADGES.map(badge => {
             const isEarned = earnedSet.has(badge.id);
             const color = isEarned ? (TIER_COLORS[badge.tier] ?? '#6B7280') : '#D1D5DB';
+            const iconSize = isMobile ? 28 : 36;
             return (
               <div
                 key={badge.id}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 12px',
+                  display: 'flex', alignItems: 'center',
+                  gap: isMobile ? 7 : 10,
+                  padding: isMobile ? '8px 8px' : '10px 12px',
                   background: isEarned ? '#FAFAFA' : '#F9FAFB',
                   borderRadius: 10,
                   border: `1px solid ${isEarned ? '#E5E7EB' : '#F3F4F6'}`,
                   opacity: isEarned ? 1 : 0.55,
+                  overflow: 'hidden',   // ← prevents the card itself from overflowing its cell
+                  minWidth: 0,
                 }}
               >
                 <div style={{
-                  width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+                  width: iconSize, height: iconSize, borderRadius: isMobile ? 6 : 8, flexShrink: 0,
                   background: isEarned ? color + '22' : '#F3F4F6',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: isEarned ? 20 : 16,
+                  fontSize: isMobile ? (isEarned ? 15 : 11) : (isEarned ? 20 : 16),
                 }}>
                   {isEarned ? badge.glyph : '✕'}
                 </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ color: '#111827', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ color: '#111827', fontWeight: 700, fontSize: isMobile ? 11 : 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {badge.name}
                   </div>
-                  <div style={{ color: '#9CA3AF', fontSize: 10, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ color: '#9CA3AF', fontSize: isMobile ? 9 : 10, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {badge.desc}
                   </div>
                 </div>
@@ -230,16 +236,23 @@ export default function HomeScreen() {
   );
 }
 
-function StatCard({ label, value, sub, color = '#111827', bg = '#FFFFFF' }: {
-  label: string; value: string; sub: string; color?: string; bg?: string;
+function StatCard({ label, value, sub, color = '#111827', bg = '#FFFFFF', onClick }: {
+  label: string; value: string; sub: string; color?: string; bg?: string; onClick?: () => void;
 }) {
   return (
-    <div style={{ background: bg, borderRadius: 12, padding: '16px 18px', border: '1px solid #E5E7EB' }}>
-      <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 6 }}>
+    <div
+      onClick={onClick}
+      style={{ background: bg, borderRadius: 12, padding: '14px 16px', border: '1px solid #E5E7EB', cursor: onClick ? 'pointer' : undefined }}
+    >
+      <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 5 }}>
         {label}
       </div>
-      <div style={{ color, fontWeight: 800, fontSize: 26, lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ color: '#6B7280', fontSize: 12, marginTop: 4 }}>{sub}</div>}
+      <div style={{ color, fontWeight: 800, fontSize: 22, lineHeight: 1 }}>{value}</div>
+      {sub && (
+        <div style={{ color: '#6B7280', fontSize: 11, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {sub}
+        </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useGameStore, fmt } from '@/store/gameStore';
+import { useBreakpoint } from '@/hooks/useBreakpoint';
 import BracketTree from '@/components/BracketTree';
 
 export default function BracketScreen() {
@@ -19,6 +20,7 @@ export default function BracketScreen() {
   const showHighlightCard = useGameStore(s => s.showHighlightCard);
 
   const [showChampionPopup, setShowChampionPopup] = useState(false);
+  const { isMobile } = useBreakpoint();
 
   const done = simStep >= 4;
 
@@ -150,45 +152,60 @@ export default function BracketScreen() {
       <div style={{
         height: 'calc(100vh - 60px)',
         display: 'flex', flexDirection: 'column',
-        padding: '20px 24px 20px',
+        padding: isMobile ? '12px 12px' : '20px 24px',
         overflow: 'hidden',
+        gap: isMobile ? 8 : 0,
       }}>
 
-        {/* ── Header row ── */}
-        <div style={{
-          flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          marginBottom: 16,
-        }}>
-          <div>
-            {humanConf && humanSeed && (
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                background: '#F5F3FF', borderRadius: 20,
-                padding: '4px 12px', marginBottom: 6,
-              }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#7A3FF2' }} />
-                <span style={{ color: '#7A3FF2', fontSize: 11, fontWeight: 800, letterSpacing: '0.08em' }}>
-                  PRO · YOU ARE THE {humanConf.toUpperCase()} {humanSeed} SEED
-                </span>
-              </div>
-            )}
-            <div style={{ color: '#111827', fontWeight: 800, fontSize: 24 }}>NBA Playoffs</div>
-          </div>
+        {/* ── Header ── */}
+        <div style={{ flexShrink: 0, marginBottom: isMobile ? 0 : 16 }}>
+          {/* Top row: title + badge */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div>
+              {humanConf && humanSeed && (
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  background: '#F5F3FF', borderRadius: 20,
+                  padding: '3px 10px', marginBottom: 4,
+                  maxWidth: '100%',
+                }}>
+                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#7A3FF2', flexShrink: 0 }} />
+                  <span style={{
+                    color: '#7A3FF2', fontSize: isMobile ? 10 : 11,
+                    fontWeight: 800, letterSpacing: '0.06em',
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {isMobile
+                      ? `${humanConf.toUpperCase()} #${humanSeed}`
+                      : `PRO · YOU ARE THE ${humanConf.toUpperCase()} ${humanSeed} SEED`}
+                  </span>
+                </div>
+              )}
+              <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 20 : 24 }}>NBA Playoffs</div>
+            </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
-            {!done ? (
-              <>
-                <button onClick={simAll}    style={ghostBtn}>Sim to Finals</button>
-                <button onClick={simNext}   style={ghostBtn}>Quick sim</button>
-                <button onClick={playRound} style={primaryBtn}>▶ Watch my game</button>
-              </>
-            ) : (
-              <>
-                <button onClick={showHighlightCard} style={ghostBtn}>Highlight Card</button>
-                <button onClick={startNewRun}       style={primaryBtn}>New Run</button>
-              </>
-            )}
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              {!done ? (
+                isMobile ? (
+                  <>
+                    <button onClick={simNext}   style={ghostBtn}>Sim</button>
+                    <button onClick={playRound} style={primaryBtn}>▶ Watch</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={simAll}    style={ghostBtn}>Sim to Finals</button>
+                    <button onClick={simNext}   style={ghostBtn}>Quick sim</button>
+                    <button onClick={playRound} style={primaryBtn}>▶ Watch my game</button>
+                  </>
+                )
+              ) : (
+                <>
+                  <button onClick={showHighlightCard} style={ghostBtn}>{isMobile ? '★' : 'Highlight Card'}</button>
+                  <button onClick={startNewRun}       style={primaryBtn}>New Run</button>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -197,20 +214,21 @@ export default function BracketScreen() {
           <div style={{
             flexShrink: 0,
             background: 'linear-gradient(135deg, #7A3FF2 0%, #4C1D95 100%)',
-            borderRadius: 14, padding: '18px 24px', marginBottom: 14,
-            display: 'flex', alignItems: 'center', gap: 18,
+            borderRadius: 12, padding: isMobile ? '12px 14px' : '18px 24px',
+            marginBottom: isMobile ? 0 : 14,
+            display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 18,
           }}>
-            <div style={{ fontSize: 40 }}>🏆</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ color: '#DDD6FE', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 2 }}>
-                YOU ARE NBA CHAMPION
+            <div style={{ fontSize: isMobile ? 28 : 40 }}>🏆</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ color: '#DDD6FE', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 1 }}>
+                NBA CHAMPION
               </div>
-              <div style={{ color: '#fff', fontWeight: 900, fontSize: 24 }}>{champion.name}</div>
-              {mvp && <div style={{ color: '#C4B5FD', fontSize: 12, marginTop: 2 }}>Finals MVP: {mvp}</div>}
+              <div style={{ color: '#fff', fontWeight: 900, fontSize: isMobile ? 16 : 24, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{champion.name}</div>
+              {mvp && !isMobile && <div style={{ color: '#C4B5FD', fontSize: 12, marginTop: 2 }}>Finals MVP: {mvp}</div>}
             </div>
-            <div style={{ display: 'flex', gap: 20 }}>
-              <EarnStat label="POINTS" value={`+${fmt(pointsEarned)}`} color="#DDD6FE" />
-              <EarnStat label="COINS"  value={`+${fmt(coinsEarned)}`}  color="#FDE68A" />
+            <div style={{ display: 'flex', gap: isMobile ? 12 : 20, flexShrink: 0 }}>
+              <EarnStat label="PTS" value={`+${fmt(pointsEarned)}`} color="#DDD6FE" />
+              <EarnStat label="COINS" value={`+${fmt(coinsEarned)}`} color="#FDE68A" />
             </div>
           </div>
         )}
@@ -219,19 +237,19 @@ export default function BracketScreen() {
         {done && !champion?.isHuman && runLabel && (
           <div style={{
             flexShrink: 0,
-            background: '#fff', borderRadius: 14, padding: '14px 20px', marginBottom: 14,
+            background: '#fff', borderRadius: 12,
+            padding: isMobile ? '10px 14px' : '14px 20px',
+            marginBottom: isMobile ? 0 : 14,
             border: '1px solid #E5E7EB',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
           }}>
-            <div>
-              <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 2 }}>
-                RUN COMPLETE
-              </div>
-              <div style={{ color: '#111827', fontWeight: 700, fontSize: 15 }}>{runLabel}</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 1 }}>RUN COMPLETE</div>
+              <div style={{ color: '#111827', fontWeight: 700, fontSize: isMobile ? 13 : 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{runLabel}</div>
             </div>
-            <div style={{ display: 'flex', gap: 20 }}>
-              <EarnStat label="POINTS" value={`+${fmt(pointsEarned)}`} color="#7A3FF2" />
-              <EarnStat label="COINS"  value={`+${fmt(coinsEarned)}`}  color="#92400E" />
+            <div style={{ display: 'flex', gap: isMobile ? 12 : 20, flexShrink: 0 }}>
+              <EarnStat label="PTS"   value={`+${fmt(pointsEarned)}`} color="#7A3FF2" />
+              <EarnStat label="COINS" value={`+${fmt(coinsEarned)}`}  color="#92400E" />
             </div>
           </div>
         )}
@@ -240,10 +258,10 @@ export default function BracketScreen() {
         {bracket && (
           <div style={{
             flex: 1, minHeight: 0,
-            background: '#FFFFFF', borderRadius: 16,
-            padding: '20px 20px 16px',
+            background: '#FFFFFF', borderRadius: 14,
+            padding: isMobile ? '10px 8px' : '20px 20px 16px',
             border: '1px solid #E5E7EB',
-            overflow: 'hidden',
+            overflow: 'auto',
             display: 'flex', flexDirection: 'column', justifyContent: 'center',
           }}>
             <BracketTree bracket={bracket} />

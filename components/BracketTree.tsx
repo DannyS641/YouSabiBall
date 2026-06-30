@@ -134,7 +134,8 @@ export default function BracketTree({ bracket }: { bracket: Bracket }) {
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const update = () => setScale(Math.min(1, el.clientWidth / NATURAL_W));
+    // min 0.45 so the bracket stays readable on mobile (parent can scroll-x)
+    const update = () => setScale(Math.max(0.45, Math.min(1, el.clientWidth / NATURAL_W)));
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
@@ -151,8 +152,12 @@ export default function BracketTree({ bracket }: { bracket: Bracket }) {
   const connPad = { marginTop: HEADER_H };
 
   return (
-    <div ref={wrapRef} style={{ width: '100%', height: NATURAL_H * scale, position: 'relative', overflow: 'hidden' }}>
+    // wrapRef measures available width to compute scale
+    <div ref={wrapRef} style={{ width: '100%' }}>
+      {/* middle div has the VISUAL dimensions — parent overflow:auto lets it scroll on mobile */}
+      <div style={{ width: NATURAL_W * scale, height: NATURAL_H * scale, position: 'relative', overflow: 'hidden' }}>
       <div style={{
+        position: 'absolute', top: 0, left: 0,
         width: NATURAL_W,
         transform: `scale(${scale})`,
         transformOrigin: 'top left',
@@ -212,6 +217,7 @@ export default function BracketTree({ bracket }: { bracket: Bracket }) {
             color: '#E2622C', fontSize: 10, fontWeight: 800, letterSpacing: '0.12em',
           }}>WESTERN</span>
         </div>
+      </div>
       </div>
     </div>
   );

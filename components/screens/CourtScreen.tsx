@@ -1,6 +1,7 @@
 'use client';
 
 import { useGameStore, POS_COLORS, POS_SPOT_HALF, TIER_COLORS } from '@/store/gameStore';
+import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { POSITIONS } from '@/lib/types';
 import { tierFor, getTeamProfile } from '@/lib/sim';
 
@@ -9,36 +10,43 @@ export default function CourtScreen() {
   const userName      = useGameStore(s => s.userName);
   const enterPlayoffs = useGameStore(s => s.enterPlayoffs);
   const redraft       = useGameStore(s => s.startNewRun);
+  const { isMobile } = useBreakpoint();
 
   const players = POSITIONS.map(pos => ({ pos, card: roster[pos] })).filter(x => x.card);
   const profile = getTeamProfile(roster);
+  const dotSize = isMobile ? 36 : 50;
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 24px 60px' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '16px 14px 60px' : '28px 24px 60px' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <div style={{ color: '#E2622C', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: '#E2622C', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {userName.toUpperCase()}'S STARTING FIVE
           </div>
-          <div style={{ color: '#111827', fontWeight: 800, fontSize: 26 }}>On the floor</div>
+          <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 20 : 26 }}>On the floor</div>
         </div>
         <button
           onClick={enterPlayoffs}
           style={{
             background: '#16181D', border: 'none', borderRadius: 10,
-            padding: '11px 20px',
-            color: '#fff', fontWeight: 700, fontSize: 14,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+            padding: isMobile ? '10px 14px' : '11px 20px',
+            color: '#fff', fontWeight: 700, fontSize: isMobile ? 13 : 14,
+            cursor: 'pointer', flexShrink: 0,
+            whiteSpace: 'nowrap',
           }}
         >
-          Enter the playoffs →
+          {isMobile ? 'Playoffs →' : 'Enter the playoffs →'}
         </button>
       </div>
 
-      {/* Main layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20 }}>
+      {/* Main layout — stacked on mobile, side-by-side on desktop */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 320px',
+        gap: isMobile ? 14 : 20,
+      }}>
 
         {/* Court */}
         <div style={{
@@ -46,7 +54,7 @@ export default function CourtScreen() {
           background: '#E8D5B0',
           borderRadius: 14, overflow: 'hidden',
           border: '2px solid #C8AA78',
-          minHeight: 380,
+          minHeight: isMobile ? 260 : 380,
         }}>
           <HalfCourtSVG />
           {players.map(({ pos, card }) => {
@@ -66,31 +74,29 @@ export default function CourtScreen() {
                   zIndex: 2,
                 }}
               >
-                {/* Position badge */}
                 <div style={{
                   background: color, color: '#fff',
-                  fontSize: 9, fontWeight: 800, padding: '2px 5px',
-                  borderRadius: 3, marginBottom: 3, letterSpacing: '0.04em',
+                  fontSize: isMobile ? 7 : 9, fontWeight: 800, padding: '1px 4px',
+                  borderRadius: 3, marginBottom: 2, letterSpacing: '0.04em',
                 }}>
                   {pos}
                 </div>
-                {/* Dot */}
                 <div style={{
-                  width: 50, height: 50, borderRadius: '50%',
+                  width: dotSize, height: dotSize, borderRadius: '50%',
                   background: '#fff',
-                  border: `3px solid ${TIER_COLORS[tier] ?? color}`,
+                  border: `${isMobile ? 2 : 3}px solid ${TIER_COLORS[tier] ?? color}`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 900, fontSize: 16, color: '#111827',
+                  fontWeight: 900, fontSize: isMobile ? 12 : 16, color: '#111827',
                   boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                 }}>
                   {card.ovr}
                 </div>
-                {/* Name */}
                 <div style={{
-                  marginTop: 4,
+                  marginTop: 2,
                   background: 'rgba(0,0,0,0.65)', borderRadius: 4,
-                  padding: '2px 6px', color: '#fff', fontSize: 9, fontWeight: 700,
-                  whiteSpace: 'nowrap',
+                  padding: '1px 4px', color: '#fff', fontSize: isMobile ? 7 : 9, fontWeight: 700,
+                  whiteSpace: 'nowrap', maxWidth: isMobile ? 48 : 80,
+                  overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
                   {lname}
                 </div>
@@ -100,70 +106,82 @@ export default function CourtScreen() {
         </div>
 
         {/* Right panel */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'row' : 'column', gap: 12, flexWrap: isMobile ? 'wrap' : undefined }}>
           {/* Team Overall */}
           <div style={{
-            background: '#16181D', borderRadius: 12, padding: '20px 20px',
-            textAlign: 'center',
+            background: '#16181D', borderRadius: 12,
+            padding: isMobile ? '14px 16px' : '20px',
+            textAlign: 'center', flex: isMobile ? '1 1 120px' : undefined,
           }}>
-            <div style={{ color: '#fff', fontWeight: 900, fontSize: 52, lineHeight: 1 }}>
+            <div style={{ color: '#fff', fontWeight: 900, fontSize: isMobile ? 38 : 52, lineHeight: 1 }}>
               {profile.overall}
             </div>
-            <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginTop: 6 }}>
+            <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', marginTop: 4 }}>
               TEAM OVERALL
             </div>
           </div>
 
-          {/* How they play */}
-          <div style={{ background: '#fff', borderRadius: 12, padding: '16px', border: '1px solid #E5E7EB' }}>
-            <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 10 }}>
-              HOW THEY PLAY
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-              {profile.tags.map(tag => (
-                <span
-                  key={tag}
-                  style={{
-                    background: '#EDE9FE', color: '#7A3FF2',
-                    fontSize: 12, fontWeight: 700,
-                    padding: '4px 10px', borderRadius: 20,
-                  }}
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-            <div style={{ color: '#6B7280', fontSize: 12, lineHeight: 1.5 }}>
-              {profile.description}
+          {/* Position group stats */}
+          <div style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', border: '1px solid #E5E7EB', flex: isMobile ? '1 1 160px' : undefined }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, textAlign: 'center' }}>
+              <div>
+                <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 18 : 22 }}>{profile.backcourt || '—'}</div>
+                <div style={{ color: '#9CA3AF', fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', marginTop: 2 }}>BACKCOURT</div>
+              </div>
+              <div>
+                <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 18 : 22 }}>{profile.wing || '—'}</div>
+                <div style={{ color: '#9CA3AF', fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', marginTop: 2 }}>WING</div>
+              </div>
+              <div>
+                <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 18 : 22 }}>{profile.frontcourt || '—'}</div>
+                <div style={{ color: '#9CA3AF', fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', marginTop: 2 }}>FRONTCOURT</div>
+              </div>
             </div>
           </div>
 
-          {/* Position group stats */}
-          <div style={{ background: '#fff', borderRadius: 12, padding: '16px', border: '1px solid #E5E7EB' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, textAlign: 'center' }}>
-              <div>
-                <div style={{ color: '#111827', fontWeight: 800, fontSize: 22 }}>{profile.backcourt || '—'}</div>
-                <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', marginTop: 2 }}>BACKCOURT</div>
+          {/* How they play — desktop only or full width on mobile below */}
+          {!isMobile && (
+            <div style={{ background: '#fff', borderRadius: 12, padding: '16px', border: '1px solid #E5E7EB' }}>
+              <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 10 }}>
+                HOW THEY PLAY
               </div>
-              <div>
-                <div style={{ color: '#111827', fontWeight: 800, fontSize: 22 }}>{profile.wing || '—'}</div>
-                <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', marginTop: 2 }}>WING</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                {profile.tags.map(tag => (
+                  <span key={tag} style={{ background: '#EDE9FE', color: '#7A3FF2', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>
+                    {tag}
+                  </span>
+                ))}
               </div>
-              <div>
-                <div style={{ color: '#111827', fontWeight: 800, fontSize: 22 }}>{profile.frontcourt || '—'}</div>
-                <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', marginTop: 2 }}>FRONTCOURT</div>
-              </div>
+              <div style={{ color: '#6B7280', fontSize: 12, lineHeight: 1.5 }}>{profile.description}</div>
             </div>
-          </div>
+          )}
 
           <button onClick={redraft} style={{
             background: 'transparent', border: '1px solid #E5E7EB',
-            borderRadius: 10, padding: '10px',
+            borderRadius: 10, padding: isMobile ? '8px 14px' : '10px',
             color: '#6B7280', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            flex: isMobile ? '1 1 100%' : undefined,
           }}>
             Re-draft squad
           </button>
         </div>
+
+        {/* How they play — mobile: full width below the row */}
+        {isMobile && (
+          <div style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', border: '1px solid #E5E7EB' }}>
+            <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 8 }}>
+              HOW THEY PLAY
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {profile.tags.map(tag => (
+                <span key={tag} style={{ background: '#EDE9FE', color: '#7A3FF2', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 20 }}>
+                  {tag}
+                </span>
+              ))}
+            </div>
+            <div style={{ color: '#6B7280', fontSize: 12, lineHeight: 1.5 }}>{profile.description}</div>
+          </div>
+        )}
       </div>
     </div>
   );

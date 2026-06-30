@@ -15,6 +15,7 @@ export default function Navbar() {
   const viewLb             = useGameStore(s => s.viewLeaderboard);
   const viewChallenges     = useGameStore(s => s.viewChallenges);
   const viewFriends        = useGameStore(s => s.viewFriends);
+  const viewHistory        = useGameStore(s => s.viewHistory);
   const goHome             = useGameStore(s => s.goHome);
   const logout             = useGameStore(s => s.logout);
 
@@ -132,6 +133,7 @@ export default function Navbar() {
               </div>
             )}
             <NavBtn label="Home"        onClick={goHome} />
+            <NavBtn label="History"     onClick={viewHistory} />
             <NavBtn label="Challenges"  onClick={viewChallenges} badge={challengesLeft || undefined} />
             <NavBtn label="Friends"     onClick={viewFriends}    badge={friendsBadge   || undefined} />
             {phase !== 'leaderboard' && <NavBtn label="Leaderboard" onClick={viewLb} />}
@@ -202,6 +204,7 @@ export default function Navbar() {
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <NavBtn label="🏠  Home"         onClick={goHome} />
+            <NavBtn label="📋  History"      onClick={viewHistory} />
             <NavBtn label="⚡  Challenges"   onClick={viewChallenges} badge={challengesLeft || undefined} />
             <NavBtn label="👥  Friends"      onClick={viewFriends}    badge={friendsBadge   || undefined} />
             <NavBtn label="🏆  Leaderboard"  onClick={viewLb} />

@@ -10,12 +10,12 @@ export interface Breakpoint {
 }
 
 export function useBreakpoint(): Breakpoint {
-  const [width, setWidth] = useState(
-    typeof window !== 'undefined' ? window.innerWidth : 1280,
-  );
+  // Server defaults to 375 (safe mobile-first) — corrected on mount
+  const [width, setWidth] = useState(375);
 
   useEffect(() => {
     const handler = () => setWidth(window.innerWidth);
+    handler(); // measure immediately so the first paint is correct
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);

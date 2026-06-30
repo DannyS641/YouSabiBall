@@ -31,18 +31,18 @@ export default function LiveGameScreen() {
 
   return (
     <div style={{
-      height: 'calc(100vh - 60px)',
+      height: 'calc(100dvh - 60px)',
       display: 'flex', flexDirection: 'column',
       padding: isMobile ? '12px 12px' : '16px 24px',
       overflow: 'hidden',
-      gap: isMobile ? 10 : 14,
+      gap: isMobile ? 8 : 14,
     }}>
 
       {/* ── Score bar ── */}
       <div style={{
         flexShrink: 0,
         background: '#16181D', borderRadius: 14,
-        padding: '16px 28px',
+        padding: isMobile ? '10px 16px' : '16px 28px',
       }}>
         <div style={{ textAlign: 'center', marginBottom: 10 }}>
           <span style={{ color: '#6B7280', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em' }}>
@@ -101,27 +101,29 @@ export default function LiveGameScreen() {
       {/* ── Court + PBP ── */}
       <div style={{
         flex: 1, minHeight: 0,
-        display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : '1fr 300px',
-        gridTemplateRows: isMobile ? '1fr auto' : undefined,
+        display: isMobile ? 'flex' : 'grid',
+        flexDirection: isMobile ? 'column' : undefined,
+        gridTemplateColumns: isMobile ? undefined : '1fr 300px',
         gap: isMobile ? 8 : 14,
       }}>
 
-        {/* Court */}
+        {/* Court — fixed 2:1 ratio on mobile so SVG never letterboxes */}
         <div style={{
           position: 'relative',
           background: '#E8D5B0', borderRadius: 14, overflow: 'hidden',
           border: '2px solid #C8AA78',
+          aspectRatio: isMobile ? '2 / 1' : undefined,
+          flexShrink: isMobile ? 0 : undefined,
         }}>
           <CourtSVG />
           {live.aDots.map((dot, i) => (
             <div key={`a${i}`} style={{
               position: 'absolute', left: `${dot.l}%`, top: `${dot.t}%`,
               transform: 'translate(-50%,-50%)',
-              width: 34, height: 34, borderRadius: '50%',
+              width: isMobile ? 26 : 34, height: isMobile ? 26 : 34, borderRadius: '50%',
               background: dot.color,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontSize: 9, fontWeight: 700,
+              color: '#fff', fontSize: isMobile ? 7 : 9, fontWeight: 700,
               boxShadow: live.ballSide === 'A' ? `0 0 14px ${dot.color}88` : '0 1px 3px rgba(0,0,0,0.2)',
               transition: 'box-shadow 0.2s', zIndex: 2,
             }}>
@@ -132,7 +134,7 @@ export default function LiveGameScreen() {
             <div key={`b${i}`} style={{
               position: 'absolute', left: `${dot.l}%`, top: `${dot.t}%`,
               transform: 'translate(-50%,-50%)',
-              width: 28, height: 28, borderRadius: '50%',
+              width: isMobile ? 20 : 28, height: isMobile ? 20 : 28, borderRadius: '50%',
               background: dot.color,
               boxShadow: live.ballSide === 'B' ? `0 0 14px ${dot.color}88` : '0 1px 3px rgba(0,0,0,0.15)',
               transition: 'box-shadow 0.2s', zIndex: 2,
@@ -142,7 +144,7 @@ export default function LiveGameScreen() {
             position: 'absolute',
             left: live.ballSide === 'A' ? '22%' : live.ballSide === 'B' ? '78%' : '50%',
             top: '50%', transform: 'translate(-50%,-50%)',
-            fontSize: 22, zIndex: 3, transition: 'left 0.3s ease',
+            fontSize: isMobile ? 16 : 22, zIndex: 3, transition: 'left 0.3s ease',
           }}>🏀</div>
         </div>
 
@@ -151,6 +153,8 @@ export default function LiveGameScreen() {
           background: '#FFFFFF', borderRadius: 14,
           border: '1px solid #E5E7EB',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          flex: isMobile ? 1 : undefined,
+          minHeight: isMobile ? 100 : undefined,
         }}>
           <div style={{
             padding: '12px 16px', borderBottom: '1px solid #F3F4F6',
@@ -189,19 +193,21 @@ export default function LiveGameScreen() {
           flexShrink: 0,
           background: youWon ? '#F5F3FF' : '#F9FAFB',
           border: `2px solid ${youWon ? '#7A3FF2' : '#E5E7EB'}`,
-          borderRadius: 14, padding: '16px 20px',
+          borderRadius: 14, padding: isMobile ? '12px 14px' : '16px 20px',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ fontSize: 32 }}>{youWon ? '🏆' : '💔'}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ color: '#111827', fontWeight: 800, fontSize: 16 }}>{live.winnerName} wins!</div>
-              <div style={{ color: '#6B7280', fontSize: 13, marginTop: 2 }}>{live.targetA} – {live.targetB}</div>
+          {/* Winner row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ fontSize: isMobile ? 24 : 32 }}>{youWon ? '🏆' : '💔'}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 14 : 16, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{live.winnerName} wins!</div>
+              <div style={{ color: '#6B7280', fontSize: 12, marginTop: 1 }}>{live.targetA} – {live.targetB}</div>
             </div>
-            {live.pog && (
+            {/* POG inline on desktop, stacked on mobile */}
+            {live.pog && !isMobile && (
               <div style={{
                 background: '#FFFFFF', borderRadius: 10, padding: '10px 14px',
                 border: `2px solid ${TIER_COLORS[live.pog.tier] ?? '#E5E7EB'}`,
-                display: 'flex', alignItems: 'center', gap: 10, minWidth: 170,
+                display: 'flex', alignItems: 'center', gap: 10, minWidth: 170, flexShrink: 0,
               }}>
                 <div style={{
                   width: 36, height: 36, borderRadius: 8, flexShrink: 0,
@@ -219,6 +225,29 @@ export default function LiveGameScreen() {
               </div>
             )}
           </div>
+          {/* POG stacked below on mobile */}
+          {live.pog && isMobile && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              marginTop: 10, paddingTop: 10, borderTop: `1px solid ${TIER_COLORS[live.pog.tier] ?? '#E5E7EB'}44`,
+            }}>
+              <div style={{
+                width: 30, height: 30, borderRadius: 6, flexShrink: 0,
+                background: TIER_COLORS[live.pog.tier] ?? '#E5E7EB',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontWeight: 900, fontSize: 10,
+              }}>
+                {live.pog.pos}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: '#6B7280', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em' }}>PLAYER OF THE GAME</div>
+                <div style={{ color: '#111827', fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{live.pog.name}</div>
+              </div>
+              <div style={{ color: '#9CA3AF', fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {live.pog.pts}pts · {live.pog.ast}ast
+              </div>
+            </div>
+          )}
         </div>
       )}
 

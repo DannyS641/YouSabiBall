@@ -2,6 +2,7 @@
 
 import { useRef } from 'react';
 import { useGameStore, POS_COLORS, TIER_COLORS, lastName } from '@/store/gameStore';
+import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { POSITIONS } from '@/lib/types';
 import { tierFor } from '@/lib/sim';
 
@@ -18,6 +19,7 @@ export default function DraftScreen() {
   const viewTeam    = useGameStore(s => s.viewTeam);
   const enterPlayoffs = useGameStore(s => s.enterPlayoffs);
 
+  const { isMobile } = useBreakpoint();
   const reelRef  = useRef<HTMLDivElement>(null);
   const complete = POSITIONS.every(p => roster[p]);
   const open     = POSITIONS.filter(p => !roster[p]);
@@ -38,7 +40,7 @@ export default function DraftScreen() {
   }
 
   return (
-    <div style={{ maxWidth: 780, margin: '0 auto', padding: '28px 24px 60px' }}>
+    <div style={{ maxWidth: 780, margin: '0 auto', padding: isMobile ? '20px 14px 60px' : '28px 24px 60px' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
@@ -57,42 +59,51 @@ export default function DraftScreen() {
       </div>
 
       {/* Position slots */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: isMobile ? 6 : 10, marginBottom: 16 }}>
         {POSITIONS.map(pos => {
-          const card = roster[pos];
-          const posColor = POS_COLORS[pos];
+          const card      = roster[pos];
+          const posColor  = POS_COLORS[pos];
           const tierColor = card ? (TIER_COLORS[tierFor(card.ovr)] ?? '#E5E7EB') : 'transparent';
           return (
             <div
               key={pos}
               style={{
-                background: '#FFFFFF', borderRadius: 12,
+                background: '#FFFFFF', borderRadius: 10,
                 border: `2px solid ${card ? tierColor : '#E5E7EB'}`,
-                padding: '14px 12px',
+                padding: isMobile ? '10px 4px' : '14px 12px',
                 textAlign: 'center',
                 transition: 'border-color 0.2s',
+                minWidth: 0,
               }}
             >
               <div style={{
-                color: posColor, fontWeight: 800, fontSize: 13,
-                letterSpacing: '0.04em', marginBottom: 6,
+                color: posColor, fontWeight: 800,
+                fontSize: isMobile ? 11 : 13,
+                letterSpacing: '0.04em',
+                marginBottom: isMobile ? 4 : 6,
               }}>
                 {pos}
               </div>
               {card ? (
                 <>
-                  <div style={{ color: '#111827', fontWeight: 700, fontSize: 12, marginBottom: 2, lineHeight: 1.2 }}>
+                  <div style={{
+                    color: '#111827', fontWeight: 700,
+                    fontSize: isMobile ? 9 : 12,
+                    marginBottom: 2, lineHeight: 1.2,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    maxWidth: '100%',
+                  }}>
                     {lastName(card.name)}
                   </div>
                   <div style={{
                     color: TIER_COLORS[tierFor(card.ovr)] ?? '#6B7280',
-                    fontWeight: 800, fontSize: 15,
+                    fontWeight: 800, fontSize: isMobile ? 14 : 15,
                   }}>
                     {card.ovr}
                   </div>
                 </>
               ) : (
-                <div style={{ color: '#D1D5DB', fontSize: 12, marginTop: 4 }}>open</div>
+                <div style={{ color: '#D1D5DB', fontSize: isMobile ? 10 : 12, marginTop: 2 }}>—</div>
               )}
             </div>
           );
@@ -150,9 +161,11 @@ export default function DraftScreen() {
             display: 'flex', alignItems: 'center', gap: 10,
           }}>
             <span style={{ fontSize: 18 }}>🎉</span>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <span style={{ color: '#111827', fontWeight: 700, fontSize: 14 }}>{lastPick.name}</span>
-              <span style={{ color: '#6B7280', fontSize: 12, marginLeft: 8 }}>{lastPick.pos} · {lastPick.team} · OVR {lastPick.ovr}</span>
+              <span style={{ color: '#6B7280', fontSize: 12, marginLeft: 8, whiteSpace: 'nowrap' }}>
+                {lastPick.pos} · {lastPick.team} · OVR {lastPick.ovr}
+              </span>
             </div>
           </div>
         )}

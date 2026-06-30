@@ -135,6 +135,17 @@ export interface Stats {
   hofTitle:     boolean;
 }
 
+// ─── Run history (Phase 6) ───────────────────────────────────────────────────
+export interface RunRecord {
+  date:       string;   // YYYY-MM-DD
+  label:      string;   // "Conference Semis", "Champion!", etc.
+  round:      number;   // wins count 0-4
+  points:     number;   // points earned this run
+  coins:      number;   // coins earned this run
+  champion:   boolean;
+  difficulty: string;
+}
+
 export interface Save {
   coins:            number;
   streak:           number;
@@ -144,6 +155,8 @@ export interface Save {
   // Phase 2
   dailyChallenges:  DailyChallenge[];
   seasonPass:       SeasonPass;
+  // Phase 6
+  recentRuns:       RunRecord[];
 }
 
 // ─── Badge ────────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import type {
   Position, Card, Roster, Bracket, LiveGame,
   Save, LbEntry, StreakNode, Match, Team,
   FriendWithStats, PendingRequest, IncomingChallenge, OutgoingChallenge,
+  RunRecord,
 } from '@/lib/types';
 import { POSITIONS, emptyRoster } from '@/lib/types';
 import { PLAYERS, SCORERS_BY_TEAM } from '@/data/players';
@@ -33,7 +34,7 @@ const LB_KEY      = 'hardwood_lb_v2';
 const PROFILE_KEY = 'hardwood_profiles_v2';
 const SAVE_KEY    = 'hardwood_save_v1';
 
-export type Phase = 'register' | 'home' | 'draft' | 'court' | 'bracket' | 'game' | 'leaderboard' | 'challenges' | 'lobby' | 'mp_room' | 'friends';
+export type Phase = 'register' | 'home' | 'draft' | 'court' | 'bracket' | 'game' | 'leaderboard' | 'challenges' | 'lobby' | 'mp_room' | 'friends' | 'history';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ function loadSave(name: string): Save {
       stats:           { ...def.stats,      ...(x.stats ?? {}) },
       seasonPass:      { ...def.seasonPass, ...(x.seasonPass ?? {}) },
       dailyChallenges: x.dailyChallenges ?? [],
+      recentRuns:      x.recentRuns ?? [],
     };
   } catch { return defaultSave(); }
 }
@@ -189,6 +191,7 @@ interface GameState {
   closeHighlightCard:  () => void;
   setShareCopied:      (v: boolean) => void;
   viewFriends:         () => void;
+  viewHistory:         () => void;
   loadFriends:         () => Promise<void>;
   startChallenge:      (challengeId: string, target: number) => void;
 
@@ -541,7 +544,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   showHighlightCard:  () => set({ showHighlight: true, shareCopied: false }),
   closeHighlightCard: () => set({ showHighlight: false }),
   setShareCopied:     v  => set({ shareCopied: v }),
-  viewFriends: () => set(s => ({ prevPhase: s.phase, phase: 'friends' })),
+  viewFriends:  () => set(s => ({ prevPhase: s.phase, phase: 'friends' })),
+  viewHistory:  () => set(s => ({ prevPhase: s.phase, phase: 'history' })),
 
   startChallenge: (challengeId, target) => set({
     activeChallengeId: challengeId, activeChallengeTarget: target,
@@ -629,6 +633,18 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (rec.isChampion) sv.stats.titles++;
     if (rec.isChampion && get().difficulty === 'Hall of Fame') sv.stats.hofTitle = true;
     sv.stats.points = entry.points;
+
+    // Prepend run record to history (keep last 30)
+    const runRec: RunRecord = {
+      date:       todayStr(),
+      label:      rec.runLabel,
+      round:      rec.winsCount,
+      points:     rec.pointsEarned,
+      coins:      rec.coinsEarned,
+      champion:   rec.isChampion,
+      difficulty: get().difficulty,
+    };
+    sv.recentRuns = [runRec, ...(sv.recentRuns ?? [])].slice(0, 30);
     const { save: saved, newly } = checkBadges(sv);
     persistSave(userName, saved);
 

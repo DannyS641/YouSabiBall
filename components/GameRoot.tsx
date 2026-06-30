@@ -17,6 +17,7 @@ import ChallengesScreen        from '@/components/screens/ChallengesScreen';
 import LobbyScreen             from '@/components/screens/LobbyScreen';
 import MultiplayerRoomScreen   from '@/components/screens/MultiplayerRoomScreen';
 import FriendsScreen           from '@/components/screens/FriendsScreen';
+import HistoryScreen            from '@/components/screens/HistoryScreen';
 
 export default function GameRoot() {
   const phase = useGameStore(s => s.phase);
@@ -27,7 +28,7 @@ export default function GameRoot() {
   if (phase === 'register') return <RegisterScreen />;
 
   return (
-    <div style={{ background: '#F4F5F7', minHeight: '100vh', fontFamily: 'var(--font-jakarta, sans-serif)' }}>
+    <div style={{ background: '#F4F5F7', minHeight: '100vh', fontFamily: 'var(--font-jakarta, sans-serif)', overflowX: 'hidden' }}>
       <Navbar />
       <div style={{ paddingTop: 60 }}>
         {phase === 'home'        && <HomeScreen />}
@@ -40,6 +41,7 @@ export default function GameRoot() {
         {phase === 'lobby'       && <LobbyScreen />}
         {phase === 'mp_room'     && <MultiplayerRoomScreen />}
         {phase === 'friends'     && <FriendsScreen />}
+        {phase === 'history'     && <HistoryScreen />}
       </div>
       <RewardToast />
       <HighlightCard />
