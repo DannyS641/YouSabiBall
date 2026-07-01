@@ -1,5 +1,8 @@
 // ─── Positions & Tiers ────────────────────────────────────────────────────────
 
+import type { SeasonSave } from '@/lib/sim/season';
+export type { SeasonSave };
+
 export type Position = 'PG' | 'SG' | 'SF' | 'PF' | 'C';
 export const POSITIONS: Position[] = ['PG', 'SG', 'SF', 'PF', 'C'];
 
@@ -163,6 +166,8 @@ export interface Save {
   favoritePlayers:  Record<string, number>;  // player name → draft count
   // Phase 21
   seenTips: string[];
+  // Season Mode
+  activeSeason: SeasonSave | null;
 }
 
 // ─── Badge ────────────────────────────────────────────────────────────────────

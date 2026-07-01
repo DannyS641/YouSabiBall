@@ -21,6 +21,7 @@ export function defaultSave(): Save {
     bestPulls: [],
     favoritePlayers: {},
     seenTips: [],
+    activeSeason: null,
   };
 }
 

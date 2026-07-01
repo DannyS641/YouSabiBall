@@ -5,7 +5,8 @@ import { useGameStore, POS_COLORS, TIER_COLORS, lastName } from '@/store/gameSto
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { PLAYERS } from '@/data/players';
 import { tierFor } from '@/lib/sim';
-import type { SeasonLength, StandingsRow, SeasonTeam, PlayInBracket, PlayInConf, PlayoffBracket, PlayoffRound, SeriesState } from '@/lib/sim';
+import { playerSeasonCost } from '@/lib/sim';
+import type { SeasonLength, StandingsRow, SeasonTeam, PlayInBracket, PlayInConf, PlayoffBracket, PlayoffRound, SeriesState, SeasonRosterPlayer, GameSlot } from '@/lib/sim';
 import type { Position, Card } from '@/lib/types';
 
 const TRADE_COST = 80;
@@ -35,7 +36,11 @@ export default function SeasonHubScreen() {
   const seasonStatus       = useGameStore(s => s.seasonStatus);
   const seasonStandings    = useGameStore(s => s.seasonStandings);
   const seasonTeams        = useGameStore(s => s.seasonTeams);
-  const seasonRoster       = useGameStore(s => s.seasonRoster);
+  const seasonSchedule     = useGameStore(s => s.seasonSchedule);
+  const seasonRosterFull   = useGameStore(s => s.seasonRosterFull);
+  const seasonGameIndex    = useGameStore(s => s.seasonGameIndex);
+  const seasonTrainingPoints = useGameStore(s => s.seasonTrainingPoints);
+  const seasonBudget       = useGameStore(s => s.seasonBudget);
   const seasonTradesLeft   = useGameStore(s => s.seasonTradesLeft);
   const seasonTradeLog     = useGameStore(s => s.seasonTradeLog);
   const seasonTradeTarget  = useGameStore(s => s.seasonTradeTarget);
@@ -47,7 +52,14 @@ export default function SeasonHubScreen() {
   const setSeasonConference    = useGameStore(s => s.setSeasonConference);
   const setDifficulty          = useGameStore(s => s.setDifficulty);
   const startSeason            = useGameStore(s => s.startSeason);
-  const advanceToTradeWindow   = useGameStore(s => s.advanceToTradeWindow);
+  const buySeasonPlayer        = useGameStore(s => s.buySeasonPlayer);
+  const removeSeasonPlayer     = useGameStore(s => s.removeSeasonPlayer);
+  const lockRoster             = useGameStore(s => s.lockRoster);
+  const simNextGame            = useGameStore(s => s.simNextGame);
+  const simWeek                = useGameStore(s => s.simWeek);
+  const simToTradeDeadline     = useGameStore(s => s.simToTradeDeadline);
+  const simRestOfSeason        = useGameStore(s => s.simRestOfSeason);
+  const spendTrainingPoint     = useGameStore(s => s.spendTrainingPoint);
   const openTradeModal         = useGameStore(s => s.openTradeModal);
   const closeTradeModal        = useGameStore(s => s.closeTradeModal);
   const executeTrade           = useGameStore(s => s.executeTrade);
@@ -55,6 +67,7 @@ export default function SeasonHubScreen() {
   const simPlayIn              = useGameStore(s => s.simPlayIn);
   const advanceToPlayoffs      = useGameStore(s => s.advanceToPlayoffs);
   const simNextPlayoffRound    = useGameStore(s => s.simNextPlayoffRound);
+  const completeSeasonRun      = useGameStore(s => s.completeSeasonRun);
   const playInBracket          = useGameStore(s => s.playInBracket);
   const playInSeeds            = useGameStore(s => s.playInSeeds);
   const playoffBracket         = useGameStore(s => s.playoffBracket);
@@ -64,10 +77,46 @@ export default function SeasonHubScreen() {
   const humanOvr = Math.max(save?.stats.topOvr ?? 82, 75);
 
   // ── Route to the correct sub-view ─────────────────────────────────────────
+  if (seasonStatus === 'roster_build') {
+    return (
+      <RosterBuilderView
+        roster={seasonRosterFull}
+        budget={seasonBudget}
+        teams={seasonTeams}
+        userName={userName}
+        isMobile={isMobile}
+        onBuy={buySeasonPlayer}
+        onRemove={removeSeasonPlayer}
+        onLock={lockRoster}
+        onBack={goHome}
+      />
+    );
+  }
+
+  if (seasonStatus === 'regular_season') {
+    return (
+      <RegularSeasonView
+        roster={seasonRosterFull}
+        teams={seasonTeams}
+        standings={seasonStandings}
+        schedule={seasonSchedule}
+        gameIndex={seasonGameIndex}
+        trainingPoints={seasonTrainingPoints}
+        userName={userName}
+        isMobile={isMobile}
+        onNextGame={simNextGame}
+        onSimWeek={simWeek}
+        onSimToDeadline={simToTradeDeadline}
+        onSimRest={simRestOfSeason}
+        onSpendTraining={spendTrainingPoint}
+      />
+    );
+  }
+
   if (seasonStatus === 'trade_window') {
     return (
       <TradeWindowView
-        roster={seasonRoster}
+        roster={seasonRosterFull.filter(p => p.isStarter).map(p => p.card)}
         tradesLeft={seasonTradesLeft}
         tradeLog={seasonTradeLog}
         tradeTarget={seasonTradeTarget}
@@ -110,15 +159,15 @@ export default function SeasonHubScreen() {
     );
   }
 
-  if (seasonStatus === 'standings' && seasonStandings) {
+  if (seasonStatus === 'complete') {
     return (
-      <StandingsView
-        standings={seasonStandings}
-        seasonTeams={seasonTeams}
+      <SeasonCompleteView
+        teams={seasonTeams}
+        roster={seasonRosterFull}
+        playoffBracket={playoffBracket}
         userName={userName}
         isMobile={isMobile}
-        onBack={goHome}
-        onAdvance={advanceToTradeWindow}
+        onFinish={() => { completeSeasonRun(); goHome(); }}
       />
     );
   }
@@ -679,6 +728,456 @@ function TradeModal({ pos, currentCard, coins, isMobile, onExecute, onClose }: {
           Cancel
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Roster Builder View ─────────────────────────────────────────────────────
+
+const POSITIONS_ORDER: Position[] = ['PG', 'SG', 'SF', 'PF', 'C'];
+
+function RosterBuilderView({ roster, budget, teams, userName, isMobile, onBuy, onRemove, onLock, onBack }: {
+  roster: SeasonRosterPlayer[];
+  budget: number;
+  teams: SeasonTeam[];
+  userName: string;
+  isMobile: boolean;
+  onBuy: (pos: Position, isStarter: boolean, card: Card) => void;
+  onRemove: (pos: Position, isStarter: boolean) => void;
+  onLock: () => void;
+  onBack: () => void;
+}) {
+  const [shopPos, setShopPos] = useState<{ pos: Position; isStarter: boolean } | null>(null);
+  const humanOvr = Math.max(
+    Math.round(roster.filter(p => p.isStarter).reduce((s, p) => s + p.card.ovr + p.trainingBoost, 0) / Math.max(roster.filter(p => p.isStarter).length, 1)),
+    75
+  );
+  const filledStarters = POSITIONS_ORDER.filter(pos => roster.some(p => p.isStarter && p.card.pos === pos));
+  const filledBench    = POSITIONS_ORDER.filter(pos => roster.some(p => !p.isStarter && p.card.pos === pos));
+  const canLock = filledStarters.length === 5 && filledBench.length === 5;
+
+  function RosterSlot({ pos, isStarter }: { pos: Position; isStarter: boolean }) {
+    const player = roster.find(p => p.card.pos === pos && p.isStarter === isStarter);
+    const color = POS_COLORS[pos as keyof typeof POS_COLORS] ?? '#6B7280';
+    if (player) {
+      const tierColor = TIER_COLORS[tierFor(player.card.ovr)];
+      return (
+        <div style={{ background: '#F9FAFB', border: `2px solid ${tierColor}`, borderRadius: 10, padding: isMobile ? '8px 6px' : '10px 10px', textAlign: 'center', position: 'relative' }}>
+          <div style={{ color, fontWeight: 800, fontSize: 10, letterSpacing: '0.04em', marginBottom: 2 }}>{pos}</div>
+          <div style={{ color: '#111827', fontWeight: 700, fontSize: isMobile ? 9 : 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{lastName(player.card.name)}</div>
+          <div style={{ color: tierColor, fontWeight: 900, fontSize: isMobile ? 14 : 16, lineHeight: 1 }}>{player.card.ovr}</div>
+          <div style={{ color: '#9CA3AF', fontSize: 9, marginTop: 1 }}>🪙 {playerSeasonCost(player.card.ovr)}</div>
+          <button onClick={() => onRemove(pos, isStarter)} style={{ position: 'absolute', top: 3, right: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 10, lineHeight: 1, padding: 0 }}>✕</button>
+        </div>
+      );
+    }
+    return (
+      <button
+        onClick={() => setShopPos({ pos, isStarter })}
+        style={{ background: '#F3F4F6', border: '2px dashed #D1D5DB', borderRadius: 10, padding: isMobile ? '8px 6px' : '10px 10px', textAlign: 'center', cursor: 'pointer', width: '100%' }}
+      >
+        <div style={{ color, fontWeight: 800, fontSize: 10, letterSpacing: '0.04em', marginBottom: 4 }}>{pos}</div>
+        <div style={{ color: '#9CA3AF', fontSize: 16 }}>+</div>
+        <div style={{ color: '#9CA3AF', fontSize: 9, marginTop: 2 }}>Buy</div>
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 700, margin: '0 auto', padding: isMobile ? '20px 14px 80px' : '28px 24px 80px' }}>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 4 }}>ROSTER BUILDER</div>
+        <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 22 : 28, letterSpacing: '-0.02em', marginBottom: 6 }}>Build your squad</div>
+        <div style={{ color: '#6B7280', fontSize: 13 }}>Buy 5 starters + 5 bench players. Spend wisely — this roster locks in when you start.</div>
+      </div>
+
+      {/* Budget */}
+      <div style={{ ...card, marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 2 }}>SEASON BUDGET</div>
+          <div style={{ color: budget < 50 ? '#DC2626' : '#92400E', fontWeight: 900, fontSize: 24 }}>🪙 {budget}</div>
+          <div style={{ color: '#9CA3AF', fontSize: 11, marginTop: 2 }}>remaining</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em' }}>TEAM OVR</div>
+          <div style={{ color: '#7A3FF2', fontWeight: 900, fontSize: 24 }}>{humanOvr || '—'}</div>
+          <div style={{ color: '#9CA3AF', fontSize: 11 }}>{filledStarters.length}/5 starters</div>
+        </div>
+      </div>
+
+      {/* Starters grid */}
+      <div style={{ ...card, marginBottom: 12 }}>
+        <div style={sectionLabel}>STARTING 5</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: isMobile ? 6 : 10 }}>
+          {POSITIONS_ORDER.map(pos => <RosterSlot key={`s-${pos}`} pos={pos} isStarter={true} />)}
+        </div>
+      </div>
+
+      {/* Bench grid */}
+      <div style={{ ...card, marginBottom: 20 }}>
+        <div style={sectionLabel}>BENCH (5)</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: isMobile ? 6 : 10 }}>
+          {POSITIONS_ORDER.map(pos => <RosterSlot key={`b-${pos}`} pos={pos} isStarter={false} />)}
+        </div>
+      </div>
+
+      {/* Pricing guide */}
+      <div style={{ background: '#F9FAFB', borderRadius: 10, padding: '10px 14px', marginBottom: 20, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        {[84, 87, 90, 93, 96, 99].map(ovr => (
+          <div key={ovr} style={{ textAlign: 'center' }}>
+            <div style={{ color: TIER_COLORS[tierFor(ovr)], fontWeight: 800, fontSize: 12 }}>{ovr}</div>
+            <div style={{ color: '#6B7280', fontSize: 10 }}>🪙{playerSeasonCost(ovr)}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={onBack} style={{ flex: 1, padding: '13px 0', background: 'transparent', border: '1.5px solid #E5E7EB', borderRadius: 12, color: '#374151', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>← Home</button>
+        <button
+          onClick={onLock}
+          disabled={!canLock}
+          style={{ flex: 3, padding: '13px 0', background: canLock ? '#16181D' : '#F3F4F6', border: 'none', borderRadius: 12, color: canLock ? '#fff' : '#9CA3AF', fontWeight: 800, fontSize: 14, letterSpacing: '0.04em', cursor: canLock ? 'pointer' : 'default' }}
+        >
+          {canLock ? 'Lock Roster & Start Season →' : `Fill all 10 slots (${filledStarters.length + filledBench.length}/10)`}
+        </button>
+      </div>
+
+      {/* Player shop modal */}
+      {shopPos && (
+        <PlayerShopModal
+          pos={shopPos.pos}
+          isStarter={shopPos.isStarter}
+          budget={budget}
+          currentCard={roster.find(p => p.card.pos === shopPos.pos && p.isStarter === shopPos.isStarter)?.card ?? null}
+          isMobile={isMobile}
+          onBuy={(card) => { onBuy(shopPos.pos, shopPos.isStarter, card); setShopPos(null); }}
+          onClose={() => setShopPos(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function PlayerShopModal({ pos, isStarter, budget, currentCard, isMobile, onBuy, onClose }: {
+  pos: Position; isStarter: boolean; budget: number; currentCard: Card | null; isMobile: boolean;
+  onBuy: (card: Card) => void; onClose: () => void;
+}) {
+  const players = PLAYERS.filter(p => p.pos === pos).sort((a, b) => a.ovr - b.ovr);
+  const color = POS_COLORS[pos as keyof typeof POS_COLORS] ?? '#6B7280';
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: isMobile ? 0 : 20 }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 500, background: '#fff', borderRadius: isMobile ? '20px 20px 0 0' : 20, padding: isMobile ? '22px 18px 32px' : '26px 24px', maxHeight: isMobile ? '85dvh' : 'calc(100dvh - 40px)', overflowY: 'auto' }}>
+        {isMobile && <div style={{ width: 40, height: 4, borderRadius: 2, background: '#E5E7EB', margin: '0 auto 18px' }} />}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <div style={{ color, fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', marginBottom: 2 }}>{pos} — {isStarter ? 'STARTER' : 'BENCH'}</div>
+            <div style={{ color: '#111827', fontWeight: 800, fontSize: 17 }}>Pick a player</div>
+          </div>
+          <div style={{ color: '#92400E', fontWeight: 700, fontSize: 13 }}>🪙 {budget} left</div>
+        </div>
+        {currentCard && (
+          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '8px 12px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ color: '#DC2626', fontSize: 10, fontWeight: 700 }}>CURRENT</span>
+            <span style={{ flex: 1, color: '#111827', fontWeight: 700, fontSize: 13 }}>{currentCard.name}</span>
+            <span style={{ color: TIER_COLORS[tierFor(currentCard.ovr)], fontWeight: 900 }}>{currentCard.ovr}</span>
+          </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {players.map(p => {
+            const cost = playerSeasonCost(p.ovr);
+            const canAfford = cost <= budget || (currentCard?.name === p.name ? true : cost <= budget + (currentCard ? playerSeasonCost(currentCard.ovr) : 0));
+            const tierColor = TIER_COLORS[tierFor(p.ovr)];
+            return (
+              <button key={p.name} onClick={() => canAfford && onBuy(p)} disabled={!canAfford}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#F9FAFB', border: `1.5px solid ${canAfford ? '#E5E7EB' : '#F3F4F6'}`, borderRadius: 12, cursor: canAfford ? 'pointer' : 'not-allowed', textAlign: 'left', width: '100%', opacity: canAfford ? 1 : 0.5 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: '#111827', fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                  <div style={{ color: '#9CA3AF', fontSize: 11, marginTop: 1 }}>{p.team}</div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ color: tierColor, fontWeight: 900, fontSize: 18 }}>{p.ovr}</div>
+                  <div style={{ color: canAfford ? '#16A34A' : '#DC2626', fontSize: 11, fontWeight: 700 }}>🪙 {cost}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <button onClick={onClose} style={{ marginTop: 14, width: '100%', padding: '11px 0', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 10, color: '#6B7280', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Regular Season View ──────────────────────────────────────────────────────
+
+function RegularSeasonView({ roster, teams, standings, schedule, gameIndex, trainingPoints, userName, isMobile, onNextGame, onSimWeek, onSimToDeadline, onSimRest, onSpendTraining }: {
+  roster: SeasonRosterPlayer[];
+  teams: SeasonTeam[];
+  standings: { east: StandingsRow[]; west: StandingsRow[] } | null;
+  schedule: GameSlot[];
+  gameIndex: number;
+  trainingPoints: number;
+  userName: string;
+  isMobile: boolean;
+  onNextGame: () => void;
+  onSimWeek: () => void;
+  onSimToDeadline: () => void;
+  onSimRest: () => void;
+  onSpendTraining: (idx: number) => void;
+}) {
+  const [showTraining, setShowTraining] = useState(false);
+  const totalGames = schedule.length;
+  const tradeDeadline = Math.floor(totalGames / 2);
+  const pastDeadline = gameIndex >= tradeDeadline;
+  const pct = totalGames > 0 ? Math.round((gameIndex / totalGames) * 100) : 0;
+  const humanTeam = teams.find(t => t.isHuman);
+  const humanRow = standings
+    ? (standings.east.find(r => r.isHuman) ?? standings.west.find(r => r.isHuman))
+    : null;
+  const humanSeed = humanRow
+    ? ((standings!.east.findIndex(r => r.isHuman) + 1) || (standings!.west.findIndex(r => r.isHuman) + 1))
+    : null;
+
+  const nextSlot = gameIndex < schedule.length ? schedule[gameIndex] : null;
+  const nextHome = nextSlot ? teams.find(t => t.slug === nextSlot.homeSlug) : null;
+  const nextAway = nextSlot ? teams.find(t => t.slug === nextSlot.awaySlug) : null;
+
+  return (
+    <div style={{ maxWidth: 800, margin: '0 auto', padding: isMobile ? '20px 14px 80px' : '28px 24px 80px' }}>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ color: '#9CA3AF', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 4 }}>REGULAR SEASON</div>
+        <div style={{ color: '#111827', fontWeight: 800, fontSize: isMobile ? 22 : 28, letterSpacing: '-0.02em' }}>
+          {gameIndex === 0 ? 'Opening Night' : gameIndex < totalGames ? `Game ${gameIndex} of ${totalGames}` : 'Season Complete'}
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ ...card, marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ color: '#374151', fontWeight: 700, fontSize: 13 }}>{pct}% complete</div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            {humanRow && (
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700 }}>YOUR RECORD</div>
+                <div style={{ color: '#111827', fontWeight: 800, fontSize: 14 }}>{humanRow.wins}–{humanRow.losses}</div>
+              </div>
+            )}
+            {humanSeed && (
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700 }}>SEED</div>
+                <div style={{
+                  color: humanSeed <= 6 ? '#16A34A' : humanSeed <= 10 ? '#D97706' : '#DC2626',
+                  fontWeight: 800, fontSize: 14,
+                }}># {humanSeed}</div>
+              </div>
+            )}
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700 }}>TRAINING PTS</div>
+              <div style={{ color: '#7A3FF2', fontWeight: 800, fontSize: 14 }}>⚡ {trainingPoints}</div>
+            </div>
+          </div>
+        </div>
+        <div style={{ background: '#F3F4F6', borderRadius: 4, height: 8, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: '#7A3FF2', borderRadius: 4, transition: 'width 0.3s' }} />
+        </div>
+        {!pastDeadline && (
+          <div style={{ color: '#9CA3AF', fontSize: 10, marginTop: 6 }}>
+            Trade deadline at game {tradeDeadline}
+          </div>
+        )}
+      </div>
+
+      {/* Next game preview */}
+      {nextSlot && nextHome && nextAway && (
+        <div style={{ ...card, marginBottom: 14 }}>
+          <div style={sectionLabel}>NEXT GAME</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+            <div style={{ textAlign: 'center', flex: 1 }}>
+              <div style={{ color: nextHome.isHuman ? '#7A3FF2' : '#111827', fontWeight: nextHome.isHuman ? 800 : 600, fontSize: isMobile ? 14 : 16, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {nextHome.name}{nextHome.isHuman ? ' ★' : ''}
+              </div>
+              <div style={{ color: '#9CA3AF', fontSize: 11 }}>HOME · OVR {nextHome.ovr}</div>
+            </div>
+            <div style={{ color: '#D1D5DB', fontWeight: 700, fontSize: 18 }}>VS</div>
+            <div style={{ textAlign: 'center', flex: 1 }}>
+              <div style={{ color: nextAway.isHuman ? '#7A3FF2' : '#111827', fontWeight: nextAway.isHuman ? 800 : 600, fontSize: isMobile ? 14 : 16, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {nextAway.name}{nextAway.isHuman ? ' ★' : ''}
+              </div>
+              <div style={{ color: '#9CA3AF', fontSize: 11 }}>AWAY · OVR {nextAway.ovr}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sim controls */}
+      <div style={{ ...card, marginBottom: 14 }}>
+        <div style={sectionLabel}>SIM CONTROLS</div>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 8 }}>
+          {[
+            { label: 'Next Game', action: onNextGame, primary: true },
+            { label: 'Sim Week', action: onSimWeek, primary: false },
+            { label: pastDeadline ? 'Full Season' : 'To Trade Deadline', action: pastDeadline ? onSimRest : onSimToDeadline, primary: false },
+            { label: 'Sim All Remaining', action: onSimRest, primary: false },
+          ].map(btn => (
+            <button key={btn.label} onClick={btn.action} style={{ padding: '10px 8px', background: btn.primary ? '#16181D' : '#F9FAFB', border: `1px solid ${btn.primary ? 'transparent' : '#E5E7EB'}`, borderRadius: 10, color: btn.primary ? '#fff' : '#374151', fontWeight: 700, fontSize: isMobile ? 11 : 12, cursor: 'pointer', textAlign: 'center' }}>
+              {btn.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Training button */}
+      {trainingPoints > 0 && (
+        <button onClick={() => setShowTraining(true)} style={{ ...card, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, cursor: 'pointer', background: '#F5F3FF', border: '1.5px solid #C4B5FD' }}>
+          <div style={{ textAlign: 'left' }}>
+            <div style={{ color: '#7A3FF2', fontWeight: 800, fontSize: 14 }}>⚡ Train Your Players</div>
+            <div style={{ color: '#9CA3AF', fontSize: 12, marginTop: 2 }}>+1 OVR per point, max +5 per player per season</div>
+          </div>
+          <div style={{ background: '#7A3FF2', color: '#fff', borderRadius: 20, padding: '3px 10px', fontWeight: 800, fontSize: 12 }}>
+            {trainingPoints} pts
+          </div>
+        </button>
+      )}
+
+      {/* Compact standings */}
+      {standings && (
+        <div style={{ ...card, marginBottom: 14 }}>
+          <div style={sectionLabel}>STANDINGS SNAPSHOT — {humanRow?.conference.toUpperCase() ?? 'YOUR CONFERENCE'}</div>
+          {(humanRow?.conference === 'East' ? standings.east : standings.west).slice(0, 10).map((row, i) => (
+            <div key={row.slug} style={{ display: 'flex', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid #F9FAFB', background: row.isHuman ? '#F5F3FF' : undefined, borderLeft: row.isHuman ? '2px solid #7A3FF2' : undefined, paddingLeft: row.isHuman ? 6 : 0 }}>
+              <span style={{ color: i < 6 ? '#16A34A' : i < 10 ? '#D97706' : '#9CA3AF', fontSize: 10, fontWeight: 800, width: 18 }}>{i + 1}</span>
+              <span style={{ flex: 1, color: row.isHuman ? '#7A3FF2' : '#374151', fontWeight: row.isHuman ? 800 : 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {row.name}{row.isHuman ? ' ★' : ''}
+              </span>
+              <span style={{ color: '#6B7280', fontSize: 11, minWidth: 40, textAlign: 'right' }}>{row.wins}–{row.losses}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Training modal */}
+      {showTraining && (
+        <TrainingModal
+          roster={roster}
+          trainingPoints={trainingPoints}
+          isMobile={isMobile}
+          onSpend={onSpendTraining}
+          onClose={() => setShowTraining(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function TrainingModal({ roster, trainingPoints, isMobile, onSpend, onClose }: {
+  roster: SeasonRosterPlayer[]; trainingPoints: number; isMobile: boolean;
+  onSpend: (idx: number) => void; onClose: () => void;
+}) {
+  const allPlayers = [...roster].sort((a, b) => (a.isStarter ? 0 : 1) - (b.isStarter ? 0 : 1));
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: isMobile ? 0 : 20 }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 500, background: '#fff', borderRadius: isMobile ? '20px 20px 0 0' : 20, padding: isMobile ? '22px 18px 32px' : '26px 24px', maxHeight: isMobile ? '85dvh' : 'calc(100dvh - 40px)', overflowY: 'auto' }}>
+        {isMobile && <div style={{ width: 40, height: 4, borderRadius: 2, background: '#E5E7EB', margin: '0 auto 18px' }} />}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div>
+            <div style={{ color: '#7A3FF2', fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', marginBottom: 2 }}>TRAINING ROOM</div>
+            <div style={{ color: '#111827', fontWeight: 800, fontSize: 17 }}>Boost a player</div>
+          </div>
+          <div style={{ color: '#7A3FF2', fontWeight: 800, fontSize: 14 }}>⚡ {trainingPoints} pts</div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {allPlayers.map((player, idx) => {
+            const realIdx = roster.indexOf(player);
+            const capped = player.trainingBoost >= 5;
+            const tierColor = TIER_COLORS[tierFor(player.card.ovr + player.trainingBoost)];
+            const color = POS_COLORS[player.card.pos as keyof typeof POS_COLORS] ?? '#6B7280';
+            return (
+              <div key={realIdx} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#F9FAFB', borderRadius: 10, border: '1px solid #E5E7EB' }}>
+                <div style={{ color, fontWeight: 800, fontSize: 10, minWidth: 24 }}>{player.card.pos}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: '#111827', fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.card.name}</div>
+                  <div style={{ color: '#9CA3AF', fontSize: 10 }}>{player.isStarter ? 'Starter' : 'Bench'}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ color: tierColor, fontWeight: 900, fontSize: 16 }}>{player.card.ovr + player.trainingBoost}</div>
+                    {player.trainingBoost > 0 && (
+                      <div style={{ color: '#16A34A', fontSize: 9, fontWeight: 700 }}>+{player.trainingBoost}</div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 2 }}>
+                    {[0,1,2,3,4].map(i => (
+                      <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i < player.trainingBoost ? '#7A3FF2' : '#E5E7EB' }} />
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => trainingPoints > 0 && !capped && onSpend(realIdx)}
+                    disabled={trainingPoints <= 0 || capped}
+                    style={{ background: !capped && trainingPoints > 0 ? '#7A3FF2' : '#F3F4F6', border: 'none', borderRadius: 6, padding: '4px 8px', color: !capped && trainingPoints > 0 ? '#fff' : '#9CA3AF', fontSize: 10, fontWeight: 700, cursor: !capped && trainingPoints > 0 ? 'pointer' : 'default' }}
+                  >
+                    {capped ? 'MAX' : '+1 OVR'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={onClose} style={{ marginTop: 14, width: '100%', padding: '11px 0', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 10, color: '#6B7280', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Done</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Season Complete View ─────────────────────────────────────────────────────
+
+function SeasonCompleteView({ teams, roster, playoffBracket, userName, isMobile, onFinish }: {
+  teams: SeasonTeam[];
+  roster: SeasonRosterPlayer[];
+  playoffBracket: PlayoffBracket | null;
+  userName: string;
+  isMobile: boolean;
+  onFinish: () => void;
+}) {
+  const humanWon = !!playoffBracket?.champion?.isHuman;
+  const champion = playoffBracket?.champion;
+  const humanTeam = teams.find(t => t.isHuman);
+  const starters = roster.filter(p => p.isStarter);
+
+  return (
+    <div style={{ maxWidth: 700, margin: '0 auto', padding: isMobile ? '40px 16px 80px' : '60px 24px 80px', textAlign: 'center' }}>
+      <div style={{ fontSize: 56, marginBottom: 12 }}>{humanWon ? '🏆' : '🏀'}</div>
+      <div style={{ color: '#111827', fontWeight: 900, fontSize: isMobile ? 26 : 34, letterSpacing: '-0.02em', marginBottom: 8 }}>
+        {humanWon ? `${userName} are NBA Champions!` : 'Season Complete'}
+      </div>
+      <div style={{ color: '#6B7280', fontSize: 14, marginBottom: 28 }}>
+        {humanWon
+          ? `Your squad went all the way. +250 coins · +1 title earned.`
+          : champion
+            ? `${champion.name} won the championship this season.`
+            : 'Thanks for playing — a new season awaits.'}
+      </div>
+
+      {humanTeam && (
+        <div style={{ background: '#F9FAFB', borderRadius: 14, padding: '18px 20px', marginBottom: 20, textAlign: 'left' }}>
+          <div style={sectionLabel}>YOUR FINAL RECORD</div>
+          <div style={{ display: 'flex', gap: 20, justifyContent: 'center' }}>
+            {[
+              { label: 'W', value: humanTeam.wins },
+              { label: 'L', value: humanTeam.losses },
+              { label: 'OVR', value: Math.round(starters.reduce((s, p) => s + p.card.ovr + p.trainingBoost, 0) / Math.max(starters.length, 1)) },
+            ].map(stat => (
+              <div key={stat.label} style={{ textAlign: 'center' }}>
+                <div style={{ color: '#9CA3AF', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em' }}>{stat.label}</div>
+                <div style={{ color: '#111827', fontWeight: 900, fontSize: 28, lineHeight: 1 }}>{stat.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <button onClick={onFinish} style={{ padding: '16px 40px', background: '#16181D', border: 'none', borderRadius: 14, color: '#fff', fontWeight: 900, fontSize: 15, letterSpacing: '0.04em', cursor: 'pointer' }}>
+        Back to Home
+      </button>
     </div>
   );
 }

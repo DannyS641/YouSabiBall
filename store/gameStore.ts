@@ -32,8 +32,10 @@ import {
   simPlayoffRound,
   buildNextRound,
   simFullSeries,
+  playerSeasonCost,
+  simulateGame,
 } from '@/lib/sim';
-import type { GameEvent, EarnedBadge, ChallengeAward, DraftTokenTier, PackType, Perk, Upgrade, SeasonLength, SeasonTeam, GameSlot, StandingsRow, PlayInBracket, PlayoffBracket, SeriesState } from '@/lib/sim';
+import type { GameEvent, EarnedBadge, ChallengeAward, DraftTokenTier, PackType, Perk, Upgrade, SeasonLength, SeasonTeam, GameSlot, StandingsRow, PlayInBracket, PlayoffBracket, SeriesState, SeasonRosterPlayer, SeasonSave } from '@/lib/sim';
 import { recordRunServer, syncSave, fetchLeaderboard } from '@/app/actions/game';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -181,19 +183,22 @@ interface GameState {
   mpResult:    { winner: 'host' | 'guest'; hostScore: number; guestScore: number } | null;
 
   // Season Mode (S2+)
-  seasonLength:      SeasonLength;
-  seasonConference:  'East' | 'West';
-  seasonTeams:       SeasonTeam[];
-  seasonSchedule:    GameSlot[];
-  seasonStandings:   { east: StandingsRow[]; west: StandingsRow[] } | null;
-  seasonStatus:      'setup' | 'standings' | 'trade_window' | 'play_in' | 'playoffs';
-  seasonRoster:      Card[];
-  seasonTradesLeft:  number;
-  seasonTradeLog:    { pos: string; offered: string; received: string }[];
-  seasonTradeTarget: Position | null;
-  playInBracket:     PlayInBracket | null;
-  playInSeeds:       { east: SeasonTeam[]; west: SeasonTeam[] } | null;
-  playoffBracket:    PlayoffBracket | null;
+  seasonLength:         SeasonLength;
+  seasonConference:     'East' | 'West';
+  seasonTeams:          SeasonTeam[];
+  seasonSchedule:       GameSlot[];
+  seasonStandings:      { east: StandingsRow[]; west: StandingsRow[] } | null;
+  seasonStatus:         'setup' | 'roster_build' | 'regular_season' | 'trade_window' | 'play_in' | 'playoffs' | 'complete';
+  seasonRosterFull:     SeasonRosterPlayer[];
+  seasonGameIndex:      number;
+  seasonTrainingPoints: number;
+  seasonBudget:         number;
+  seasonTradesLeft:     number;
+  seasonTradeLog:       { pos: string; offered: string; received: string }[];
+  seasonTradeTarget:    Position | null;
+  playInBracket:        PlayInBracket | null;
+  playInSeeds:          { east: SeasonTeam[]; west: SeasonTeam[] } | null;
+  playoffBracket:       PlayoffBracket | null;
 
   // Social (Phase 4)
   friends:              FriendWithStats[];
@@ -237,18 +242,26 @@ interface GameState {
   showHighlightCard:   () => void;
   closeHighlightCard:  () => void;
   setShareCopied:      (v: boolean) => void;
-  viewSeasonHub:          () => void;
-  setSeasonLength:        (l: SeasonLength) => void;
-  setSeasonConference:    (c: 'East' | 'West') => void;
-  startSeason:            () => void;
-  advanceToTradeWindow:   () => void;
-  openTradeModal:         (pos: Position) => void;
-  closeTradeModal:        () => void;
-  executeTrade:           (pos: Position, target: Card) => void;
-  skipTradeWindow:        () => void;
-  simPlayIn:              () => void;
-  advanceToPlayoffs:      () => void;
-  simNextPlayoffRound:    () => void;
+  viewSeasonHub:           () => void;
+  setSeasonLength:         (l: SeasonLength) => void;
+  setSeasonConference:     (c: 'East' | 'West') => void;
+  startSeason:             () => void;
+  buySeasonPlayer:         (pos: Position, isStarter: boolean, card: Card) => void;
+  removeSeasonPlayer:      (pos: Position, isStarter: boolean) => void;
+  lockRoster:              () => void;
+  simNextGame:             () => void;
+  simWeek:                 () => void;
+  simToTradeDeadline:      () => void;
+  simRestOfSeason:         () => void;
+  spendTrainingPoint:      (slotIndex: number) => void;
+  openTradeModal:          (pos: Position) => void;
+  closeTradeModal:         () => void;
+  executeTrade:            (pos: Position, target: Card) => void;
+  skipTradeWindow:         () => void;
+  simPlayIn:               () => void;
+  advanceToPlayoffs:       () => void;
+  simNextPlayoffRound:     () => void;
+  completeSeasonRun:       () => void;
   viewFriends:         () => void;
   viewHistory:         () => void;
   viewShop:            () => void;
@@ -288,7 +301,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   _diffBias: 0, _diffMult: 1, _recorded: false,
   seasonLength: 'standard', seasonConference: 'East',
   seasonTeams: [], seasonSchedule: [], seasonStandings: null, seasonStatus: 'setup',
-  seasonRoster: [], seasonTradesLeft: 3, seasonTradeLog: [], seasonTradeTarget: null,
+  seasonRosterFull: [], seasonGameIndex: 0, seasonTrainingPoints: 0, seasonBudget: 600,
+  seasonTradesLeft: 3, seasonTradeLog: [], seasonTradeTarget: null,
   playInBracket: null, playInSeeds: null, playoffBracket: null,
   leaderboard: [], lastPull: null,
   claimToast: null, badgeToast: [], showHighlight: false, shareCopied: false,
@@ -759,10 +773,40 @@ export const useGameStore = create<GameState>((set, get) => ({
   showHighlightCard:  () => set({ showHighlight: true, shareCopied: false }),
   closeHighlightCard: () => set({ showHighlight: false }),
   setShareCopied:     v  => set({ shareCopied: v }),
-  viewSeasonHub: () => set(s => ({
-    prevPhase: s.phase, phase: 'season_hub', seasonStatus: 'setup', seasonStandings: null,
-    playInBracket: null, playInSeeds: null, playoffBracket: null,
-  })),
+  viewSeasonHub: () => {
+    const { save } = get();
+    const active = save?.activeSeason;
+    if (active && active.status !== 'complete') {
+      set(s => ({
+        prevPhase: s.phase, phase: 'season_hub',
+        seasonStatus:         active.status,
+        seasonLength:         active.length,
+        seasonConference:     active.conference,
+        seasonTeams:          active.teams,
+        seasonSchedule:       active.schedule,
+        seasonGameIndex:      active.gameIndex,
+        seasonStandings:      active.standings,
+        seasonBudget:         active.rosterBudget,
+        seasonRosterFull:     active.roster,
+        seasonTrainingPoints: active.trainingPoints,
+        seasonTradesLeft:     active.tradesLeft,
+        seasonTradeLog:       active.tradeLog,
+        seasonTradeTarget:    null,
+        playInBracket:        active.playInBracket,
+        playInSeeds:          active.playInSeeds,
+        playoffBracket:       active.playoffBracket,
+      }));
+    } else {
+      set(s => ({
+        prevPhase: s.phase, phase: 'season_hub', seasonStatus: 'setup',
+        seasonStandings: null, seasonTeams: [], seasonSchedule: [],
+        seasonRosterFull: [], seasonGameIndex: 0, seasonTrainingPoints: 0,
+        seasonBudget: 600, seasonTradesLeft: 3, seasonTradeLog: [],
+        seasonTradeTarget: null,
+        playInBracket: null, playInSeeds: null, playoffBracket: null,
+      }));
+    }
+  },
 
   setSeasonLength:     (l) => set({ seasonLength: l }),
   setSeasonConference: (c) => set({ seasonConference: c }),
@@ -770,72 +814,308 @@ export const useGameStore = create<GameState>((set, get) => ({
   startSeason: () => {
     const { userName, save, difficulty, seasonLength, seasonConference } = get();
     const humanOvr = Math.max(save?.stats.topOvr ?? 82, 75);
-    const diff = DIFF_SETTINGS[difficulty as keyof typeof DIFF_SETTINGS];
     const teams = buildSeasonTeams(userName, humanOvr, seasonConference);
     const seed = Date.now() & 0xFFFFFF;
     const schedule = generateSchedule(teams, seasonLength, seed);
-    const { teams: simTeams, schedule: simSchedule } = simulateSeason(teams, schedule, diff.bias);
-    const standings = computeStandings(simTeams);
-
-    // Build season roster — one real player card per position near the human OVR
-    const seasonRoster: Card[] = POSITIONS.map(pos => {
-      const pool = PLAYERS.filter(p => p.pos === pos && Math.abs(p.ovr - humanOvr) <= 8);
-      const src = pool.length ? pool : PLAYERS.filter(p => p.pos === pos);
-      return src[Math.floor(Math.random() * src.length)];
-    });
-
-    // Award coins per win (5 per win)
-    const humanTeam = simTeams.find(t => t.isHuman);
-    if (humanTeam && save) {
-      const coinsGained = humanTeam.wins * 5;
-      if (coinsGained > 0) {
-        const sv = clone(save);
-        sv.coins += coinsGained;
-        persistSave(userName, sv);
-        set({ save: sv });
-      }
+    const seasonSave: SeasonSave = {
+      status: 'roster_build', length: seasonLength, conference: seasonConference, difficulty,
+      teams, schedule, gameIndex: 0, standings: null,
+      rosterBudget: 600, roster: [], trainingPoints: 0,
+      tradesLeft: 3, tradeLog: [],
+      playInBracket: null, playInSeeds: null, playoffBracket: null,
+    };
+    if (save) {
+      const sv = clone(save);
+      sv.activeSeason = seasonSave;
+      persistSave(userName, sv);
+      set({ save: sv });
     }
-
     set({
-      seasonTeams: simTeams, seasonSchedule: simSchedule,
-      seasonStandings: standings, seasonStatus: 'standings',
-      seasonRoster, seasonTradesLeft: 3, seasonTradeLog: [],
+      seasonTeams: teams, seasonSchedule: schedule,
+      seasonStandings: null, seasonStatus: 'roster_build',
+      seasonRosterFull: [], seasonGameIndex: 0, seasonTrainingPoints: 0,
+      seasonBudget: 600, seasonTradesLeft: 3, seasonTradeLog: [],
     });
   },
 
-  advanceToTradeWindow: () => set({ seasonStatus: 'trade_window', seasonTradeTarget: null }),
+  buySeasonPlayer: (pos, isStarter, card) => {
+    const { seasonBudget, seasonRosterFull, seasonTeams, save, userName,
+            seasonLength, seasonConference, difficulty, seasonSchedule, seasonStandings,
+            seasonGameIndex, seasonTrainingPoints, seasonTradesLeft, seasonTradeLog,
+            playInBracket, playInSeeds, playoffBracket } = get();
+    const cost = playerSeasonCost(card.ovr);
+    if (cost > seasonBudget) return;
+    // Replace existing slot or add
+    const existing = seasonRosterFull.findIndex(p => p.card.pos === pos && p.isStarter === isStarter);
+    let newRoster: SeasonRosterPlayer[];
+    if (existing >= 0) {
+      const freed = playerSeasonCost(seasonRosterFull[existing].card.ovr);
+      newRoster = [...seasonRosterFull];
+      newRoster[existing] = { card, isStarter, trainingBoost: 0 };
+      const newBudget = seasonBudget + freed - cost;
+      const sv = save ? (() => { const s = clone(save); s.activeSeason = { status: 'roster_build', length: seasonLength, conference: seasonConference, difficulty, teams: seasonTeams, schedule: seasonSchedule, gameIndex: seasonGameIndex, standings: seasonStandings, rosterBudget: newBudget, roster: newRoster, trainingPoints: seasonTrainingPoints, tradesLeft: seasonTradesLeft, tradeLog: seasonTradeLog, playInBracket, playInSeeds, playoffBracket }; persistSave(userName, s); return s; })() : null;
+      set({ seasonRosterFull: newRoster, seasonBudget: newBudget, ...(sv ? { save: sv } : {}) });
+    } else {
+      newRoster = [...seasonRosterFull, { card, isStarter, trainingBoost: 0 }];
+      const newBudget = seasonBudget - cost;
+      const sv = save ? (() => { const s = clone(save); s.activeSeason = { status: 'roster_build', length: seasonLength, conference: seasonConference, difficulty, teams: seasonTeams, schedule: seasonSchedule, gameIndex: seasonGameIndex, standings: seasonStandings, rosterBudget: newBudget, roster: newRoster, trainingPoints: seasonTrainingPoints, tradesLeft: seasonTradesLeft, tradeLog: seasonTradeLog, playInBracket, playInSeeds, playoffBracket }; persistSave(userName, s); return s; })() : null;
+      set({ seasonRosterFull: newRoster, seasonBudget: newBudget, ...(sv ? { save: sv } : {}) });
+    }
+  },
+
+  removeSeasonPlayer: (pos, isStarter) => {
+    const { seasonRosterFull, seasonBudget, seasonTeams, save, userName,
+            seasonLength, seasonConference, difficulty, seasonSchedule, seasonStandings,
+            seasonGameIndex, seasonTrainingPoints, seasonTradesLeft, seasonTradeLog,
+            playInBracket, playInSeeds, playoffBracket } = get();
+    const idx = seasonRosterFull.findIndex(p => p.card.pos === pos && p.isStarter === isStarter);
+    if (idx < 0) return;
+    const freed = playerSeasonCost(seasonRosterFull[idx].card.ovr);
+    const newRoster = seasonRosterFull.filter((_, i) => i !== idx);
+    const newBudget = seasonBudget + freed;
+    if (save) {
+      const sv = clone(save);
+      sv.activeSeason = { status: 'roster_build', length: seasonLength, conference: seasonConference, difficulty, teams: seasonTeams, schedule: seasonSchedule, gameIndex: seasonGameIndex, standings: seasonStandings, rosterBudget: newBudget, roster: newRoster, trainingPoints: seasonTrainingPoints, tradesLeft: seasonTradesLeft, tradeLog: seasonTradeLog, playInBracket, playInSeeds, playoffBracket };
+      persistSave(userName, sv);
+      set({ seasonRosterFull: newRoster, seasonBudget: newBudget, save: sv });
+    } else {
+      set({ seasonRosterFull: newRoster, seasonBudget: newBudget });
+    }
+  },
+
+  lockRoster: () => {
+    const { seasonRosterFull, seasonTeams, save, userName,
+            seasonLength, seasonConference, difficulty, seasonSchedule, seasonStandings,
+            seasonGameIndex, seasonTrainingPoints, seasonBudget, seasonTradesLeft, seasonTradeLog,
+            playInBracket, playInSeeds, playoffBracket } = get();
+    if (seasonRosterFull.length < 10) return;
+    const starters = seasonRosterFull.filter(p => p.isStarter);
+    const effectiveOvr = Math.round(starters.reduce((s, p) => s + p.card.ovr + p.trainingBoost, 0) / Math.max(starters.length, 1));
+    const newTeams = seasonTeams.map(t => t.isHuman ? { ...t, ovr: effectiveOvr } : t);
+    if (save) {
+      const sv = clone(save);
+      sv.activeSeason = { status: 'regular_season', length: seasonLength, conference: seasonConference, difficulty, teams: newTeams, schedule: seasonSchedule, gameIndex: seasonGameIndex, standings: seasonStandings, rosterBudget: seasonBudget, roster: seasonRosterFull, trainingPoints: seasonTrainingPoints, tradesLeft: seasonTradesLeft, tradeLog: seasonTradeLog, playInBracket, playInSeeds, playoffBracket };
+      persistSave(userName, sv);
+      set({ save: sv, seasonTeams: newTeams, seasonStatus: 'regular_season' });
+    } else {
+      set({ seasonTeams: newTeams, seasonStatus: 'regular_season' });
+    }
+  },
+
+  simNextGame: () => {
+    const { seasonTeams, seasonSchedule, seasonGameIndex, difficulty, save, userName,
+            seasonLength, seasonConference, seasonRosterFull, seasonTrainingPoints, seasonBudget,
+            seasonTradesLeft, seasonTradeLog, playoffBracket } = get();
+    if (seasonGameIndex >= seasonSchedule.length) return;
+    const diff = DIFF_SETTINGS[difficulty as keyof typeof DIFF_SETTINGS];
+    const slot = seasonSchedule[seasonGameIndex];
+    const home = seasonTeams.find(t => t.slug === slot.homeSlug)!;
+    const away = seasonTeams.find(t => t.slug === slot.awaySlug)!;
+    const result = simulateGame(home, away, (Date.now() ^ seasonGameIndex) & 0xFFFFFF, diff.bias);
+    const homeWon = result.homeScore > result.awayScore;
+    const newTeams = seasonTeams.map(t => {
+      if (t.slug === slot.homeSlug) return { ...t, wins: t.wins + (homeWon ? 1 : 0), losses: t.losses + (homeWon ? 0 : 1), pointsFor: t.pointsFor + result.homeScore, pointsAgainst: t.pointsAgainst + result.awayScore };
+      if (t.slug === slot.awaySlug) return { ...t, wins: t.wins + (!homeWon ? 1 : 0), losses: t.losses + (!homeWon ? 0 : 1), pointsFor: t.pointsFor + result.awayScore, pointsAgainst: t.pointsAgainst + result.homeScore };
+      return t;
+    });
+    const newIndex = seasonGameIndex + 1;
+    const newTP = seasonTrainingPoints + 1;
+    const newStandings = computeStandings(newTeams);
+    const tradeDeadline = Math.floor(seasonSchedule.length / 2);
+    const seasonDone = newIndex >= seasonSchedule.length;
+    const hitDeadline = !seasonDone && newIndex === tradeDeadline;
+    const newStatus: GameState['seasonStatus'] = seasonDone ? 'play_in' : hitDeadline ? 'trade_window' : 'regular_season';
+    const newPlayIn = seasonDone ? buildPlayInFull(newTeams, newStandings) : null;
+    if (save) {
+      const sv = clone(save);
+      sv.activeSeason = { status: newStatus as SeasonSave['status'], length: seasonLength, conference: seasonConference, difficulty, teams: newTeams, schedule: seasonSchedule, gameIndex: newIndex, standings: newStandings, rosterBudget: seasonBudget, roster: seasonRosterFull, trainingPoints: newTP, tradesLeft: seasonTradesLeft, tradeLog: seasonTradeLog, playInBracket: newPlayIn, playInSeeds: null, playoffBracket };
+      persistSave(userName, sv);
+      set({ save: sv, seasonTeams: newTeams, seasonGameIndex: newIndex, seasonStandings: newStandings, seasonTrainingPoints: newTP, seasonStatus: newStatus, playInBracket: newPlayIn });
+    } else {
+      set({ seasonTeams: newTeams, seasonGameIndex: newIndex, seasonStandings: newStandings, seasonTrainingPoints: newTP, seasonStatus: newStatus, playInBracket: newPlayIn });
+    }
+  },
+
+  simWeek: () => {
+    const state = get();
+    const WEEK_SIZE: Record<SeasonLength, number> = { short: 2, standard: 2, full: 3 };
+    const weekGames = WEEK_SIZE[state.seasonLength] ?? 2;
+    const diff = DIFF_SETTINGS[state.difficulty as keyof typeof DIFF_SETTINGS];
+    let teams = state.seasonTeams;
+    let gameIndex = state.seasonGameIndex;
+    let trainingPoints = state.seasonTrainingPoints;
+    let newStatus: GameState['seasonStatus'] = 'regular_season';
+    let newPlayIn: PlayInBracket | null = null;
+    const tradeDeadline = Math.floor(state.seasonSchedule.length / 2);
+    for (let i = 0; i < weekGames; i++) {
+      if (gameIndex >= state.seasonSchedule.length) break;
+      const slot = state.seasonSchedule[gameIndex];
+      const home = teams.find(t => t.slug === slot.homeSlug)!;
+      const away = teams.find(t => t.slug === slot.awaySlug)!;
+      const result = simulateGame(home, away, (Date.now() ^ gameIndex ^ i * 137) & 0xFFFFFF, diff.bias);
+      const homeWon = result.homeScore > result.awayScore;
+      teams = teams.map(t => {
+        if (t.slug === slot.homeSlug) return { ...t, wins: t.wins + (homeWon ? 1 : 0), losses: t.losses + (homeWon ? 0 : 1), pointsFor: t.pointsFor + result.homeScore, pointsAgainst: t.pointsAgainst + result.awayScore };
+        if (t.slug === slot.awaySlug) return { ...t, wins: t.wins + (!homeWon ? 1 : 0), losses: t.losses + (!homeWon ? 0 : 1), pointsFor: t.pointsFor + result.awayScore, pointsAgainst: t.pointsAgainst + result.homeScore };
+        return t;
+      });
+      gameIndex++; trainingPoints++;
+      if (gameIndex >= state.seasonSchedule.length) { const st = computeStandings(teams); newPlayIn = buildPlayInFull(teams, st); newStatus = 'play_in'; break; }
+      if (gameIndex === tradeDeadline) { newStatus = 'trade_window'; break; }
+    }
+    const newStandings = computeStandings(teams);
+    if (state.save) {
+      const sv = clone(state.save);
+      sv.activeSeason = { status: newStatus as SeasonSave['status'], length: state.seasonLength, conference: state.seasonConference, difficulty: state.difficulty, teams, schedule: state.seasonSchedule, gameIndex, standings: newStandings, rosterBudget: state.seasonBudget, roster: state.seasonRosterFull, trainingPoints, tradesLeft: state.seasonTradesLeft, tradeLog: state.seasonTradeLog, playInBracket: newPlayIn, playInSeeds: null, playoffBracket: state.playoffBracket };
+      persistSave(state.userName, sv);
+      set({ save: sv, seasonTeams: teams, seasonGameIndex: gameIndex, seasonStandings: newStandings, seasonTrainingPoints: trainingPoints, seasonStatus: newStatus, playInBracket: newPlayIn });
+    } else {
+      set({ seasonTeams: teams, seasonGameIndex: gameIndex, seasonStandings: newStandings, seasonTrainingPoints: trainingPoints, seasonStatus: newStatus, playInBracket: newPlayIn });
+    }
+  },
+
+  simToTradeDeadline: () => {
+    const state = get();
+    const tradeDeadline = Math.floor(state.seasonSchedule.length / 2);
+    const count = tradeDeadline - state.seasonGameIndex;
+    if (count <= 0) return;
+    const diff = DIFF_SETTINGS[state.difficulty as keyof typeof DIFF_SETTINGS];
+    let teams = state.seasonTeams;
+    let gameIndex = state.seasonGameIndex;
+    let trainingPoints = state.seasonTrainingPoints;
+    let newStatus: GameState['seasonStatus'] = 'trade_window';
+    let newPlayIn: PlayInBracket | null = null;
+    for (let i = 0; i < count; i++) {
+      if (gameIndex >= state.seasonSchedule.length) { const st = computeStandings(teams); newPlayIn = buildPlayInFull(teams, st); newStatus = 'play_in'; break; }
+      const slot = state.seasonSchedule[gameIndex];
+      const home = teams.find(t => t.slug === slot.homeSlug)!;
+      const away = teams.find(t => t.slug === slot.awaySlug)!;
+      const result = simulateGame(home, away, (Date.now() ^ gameIndex ^ i * 97) & 0xFFFFFF, diff.bias);
+      const homeWon = result.homeScore > result.awayScore;
+      teams = teams.map(t => {
+        if (t.slug === slot.homeSlug) return { ...t, wins: t.wins + (homeWon ? 1 : 0), losses: t.losses + (homeWon ? 0 : 1), pointsFor: t.pointsFor + result.homeScore, pointsAgainst: t.pointsAgainst + result.awayScore };
+        if (t.slug === slot.awaySlug) return { ...t, wins: t.wins + (!homeWon ? 1 : 0), losses: t.losses + (!homeWon ? 0 : 1), pointsFor: t.pointsFor + result.awayScore, pointsAgainst: t.pointsAgainst + result.homeScore };
+        return t;
+      });
+      gameIndex++; trainingPoints++;
+    }
+    const newStandings = computeStandings(teams);
+    if (state.save) {
+      const sv = clone(state.save);
+      sv.activeSeason = { status: newStatus as SeasonSave['status'], length: state.seasonLength, conference: state.seasonConference, difficulty: state.difficulty, teams, schedule: state.seasonSchedule, gameIndex, standings: newStandings, rosterBudget: state.seasonBudget, roster: state.seasonRosterFull, trainingPoints, tradesLeft: state.seasonTradesLeft, tradeLog: state.seasonTradeLog, playInBracket: newPlayIn, playInSeeds: null, playoffBracket: state.playoffBracket };
+      persistSave(state.userName, sv);
+      set({ save: sv, seasonTeams: teams, seasonGameIndex: gameIndex, seasonStandings: newStandings, seasonTrainingPoints: trainingPoints, seasonStatus: newStatus, playInBracket: newPlayIn });
+    } else {
+      set({ seasonTeams: teams, seasonGameIndex: gameIndex, seasonStandings: newStandings, seasonTrainingPoints: trainingPoints, seasonStatus: newStatus, playInBracket: newPlayIn });
+    }
+  },
+
+  simRestOfSeason: () => {
+    const state = get();
+    const count = state.seasonSchedule.length - state.seasonGameIndex;
+    if (count <= 0) return;
+    const diff = DIFF_SETTINGS[state.difficulty as keyof typeof DIFF_SETTINGS];
+    let teams = state.seasonTeams;
+    let gameIndex = state.seasonGameIndex;
+    let trainingPoints = state.seasonTrainingPoints;
+    let newStatus: GameState['seasonStatus'] = 'play_in';
+    const tradeDeadline = Math.floor(state.seasonSchedule.length / 2);
+    for (let i = 0; i < count; i++) {
+      if (gameIndex >= state.seasonSchedule.length) break;
+      const slot = state.seasonSchedule[gameIndex];
+      const home = teams.find(t => t.slug === slot.homeSlug)!;
+      const away = teams.find(t => t.slug === slot.awaySlug)!;
+      const result = simulateGame(home, away, (Date.now() ^ gameIndex ^ i * 73) & 0xFFFFFF, diff.bias);
+      const homeWon = result.homeScore > result.awayScore;
+      teams = teams.map(t => {
+        if (t.slug === slot.homeSlug) return { ...t, wins: t.wins + (homeWon ? 1 : 0), losses: t.losses + (homeWon ? 0 : 1), pointsFor: t.pointsFor + result.homeScore, pointsAgainst: t.pointsAgainst + result.awayScore };
+        if (t.slug === slot.awaySlug) return { ...t, wins: t.wins + (!homeWon ? 1 : 0), losses: t.losses + (!homeWon ? 0 : 1), pointsFor: t.pointsFor + result.awayScore, pointsAgainst: t.pointsAgainst + result.homeScore };
+        return t;
+      });
+      gameIndex++; trainingPoints++;
+      if (gameIndex === tradeDeadline && i < count - 1) { newStatus = 'trade_window'; break; }
+    }
+    const finalDone = gameIndex >= state.seasonSchedule.length;
+    const newStandings = computeStandings(teams);
+    const newPlayIn = finalDone ? buildPlayInFull(teams, newStandings) : null;
+    if (!finalDone) newStatus = 'trade_window';
+    if (state.save) {
+      const sv = clone(state.save);
+      sv.activeSeason = { status: newStatus as SeasonSave['status'], length: state.seasonLength, conference: state.seasonConference, difficulty: state.difficulty, teams, schedule: state.seasonSchedule, gameIndex, standings: newStandings, rosterBudget: state.seasonBudget, roster: state.seasonRosterFull, trainingPoints, tradesLeft: state.seasonTradesLeft, tradeLog: state.seasonTradeLog, playInBracket: newPlayIn, playInSeeds: null, playoffBracket: state.playoffBracket };
+      persistSave(state.userName, sv);
+      set({ save: sv, seasonTeams: teams, seasonGameIndex: gameIndex, seasonStandings: newStandings, seasonTrainingPoints: trainingPoints, seasonStatus: newStatus, playInBracket: newPlayIn });
+    } else {
+      set({ seasonTeams: teams, seasonGameIndex: gameIndex, seasonStandings: newStandings, seasonTrainingPoints: trainingPoints, seasonStatus: newStatus, playInBracket: newPlayIn });
+    }
+  },
+
+  spendTrainingPoint: (slotIndex) => {
+    const { seasonRosterFull, seasonTrainingPoints, seasonTeams, save, userName,
+            seasonLength, seasonConference, difficulty, seasonSchedule, seasonStandings,
+            seasonGameIndex, seasonBudget, seasonTradesLeft, seasonTradeLog,
+            playInBracket, playInSeeds, playoffBracket } = get();
+    if (seasonTrainingPoints <= 0) return;
+    const player = seasonRosterFull[slotIndex];
+    if (!player || player.trainingBoost >= 5) return;
+    const newRoster = seasonRosterFull.map((p, i) =>
+      i === slotIndex ? { ...p, trainingBoost: p.trainingBoost + 1 } : p
+    );
+    const starters = newRoster.filter(p => p.isStarter);
+    const effectiveOvr = Math.round(starters.reduce((s, p) => s + p.card.ovr + p.trainingBoost, 0) / Math.max(starters.length, 1));
+    const newTeams = seasonTeams.map(t => t.isHuman ? { ...t, ovr: effectiveOvr } : t);
+    const status = get().seasonStatus as SeasonSave['status'];
+    if (save) {
+      const sv = clone(save);
+      sv.activeSeason = { status, length: seasonLength, conference: seasonConference, difficulty, teams: newTeams, schedule: seasonSchedule, gameIndex: seasonGameIndex, standings: seasonStandings, rosterBudget: seasonBudget, roster: newRoster, trainingPoints: seasonTrainingPoints - 1, tradesLeft: seasonTradesLeft, tradeLog: seasonTradeLog, playInBracket, playInSeeds, playoffBracket };
+      persistSave(userName, sv);
+      set({ save: sv, seasonRosterFull: newRoster, seasonTeams: newTeams, seasonTrainingPoints: seasonTrainingPoints - 1 });
+    } else {
+      set({ seasonRosterFull: newRoster, seasonTeams: newTeams, seasonTrainingPoints: seasonTrainingPoints - 1 });
+    }
+  },
 
   openTradeModal:  (pos) => set({ seasonTradeTarget: pos }),
   closeTradeModal: ()    => set({ seasonTradeTarget: null }),
 
   executeTrade: (pos, target) => {
-    const { seasonRoster, seasonTradesLeft, seasonTeams, seasonTradeLog, save, userName } = get();
+    const { seasonRosterFull, seasonTradesLeft, seasonTeams, seasonTradeLog, save, userName,
+            seasonLength, seasonConference, difficulty, seasonSchedule, seasonStandings,
+            seasonGameIndex, seasonBudget, seasonTrainingPoints,
+            playInBracket, playInSeeds, playoffBracket } = get();
     const TRADE_COST = 80;
     if (seasonTradesLeft <= 0 || !save || save.coins < TRADE_COST) return;
-
-    const offered = seasonRoster.find(c => c.pos === pos);
-    if (!offered || offered.name === target.name) return;
-
-    const newRoster = seasonRoster.map(c => c.pos === pos ? target : c);
-    const newOvr    = Math.round(newRoster.reduce((s, c) => s + c.ovr, 0) / newRoster.length);
-    const newTeams  = seasonTeams.map(t => t.isHuman ? { ...t, ovr: newOvr } : t);
-
+    const starterIdx = seasonRosterFull.findIndex(p => p.isStarter && p.card.pos === pos);
+    if (starterIdx < 0) return;
+    const offered = seasonRosterFull[starterIdx];
+    if (offered.card.name === target.name) return;
+    const newRoster = seasonRosterFull.map((p, i) => i === starterIdx ? { ...p, card: target, trainingBoost: 0 } : p);
+    const starters = newRoster.filter(p => p.isStarter);
+    const newOvr = Math.round(starters.reduce((s, p) => s + p.card.ovr + p.trainingBoost, 0) / Math.max(starters.length, 1));
+    const newTeams = seasonTeams.map(t => t.isHuman ? { ...t, ovr: newOvr } : t);
     const sv = clone(save);
     sv.coins -= TRADE_COST;
+    const newLog = [...seasonTradeLog, { pos, offered: offered.card.name, received: target.name }];
+    sv.activeSeason = { status: 'trade_window', length: seasonLength, conference: seasonConference, difficulty, teams: newTeams, schedule: seasonSchedule, gameIndex: seasonGameIndex, standings: seasonStandings, rosterBudget: seasonBudget, roster: newRoster, trainingPoints: seasonTrainingPoints, tradesLeft: seasonTradesLeft - 1, tradeLog: newLog, playInBracket, playInSeeds, playoffBracket };
     persistSave(userName, sv);
-
-    const newLog = [...seasonTradeLog, { pos, offered: offered.name, received: target.name }];
-    set({
-      save: sv, seasonRoster: newRoster, seasonTeams: newTeams,
-      seasonTradesLeft: seasonTradesLeft - 1,
-      seasonTradeLog: newLog, seasonTradeTarget: null,
-    });
+    set({ save: sv, seasonRosterFull: newRoster, seasonTeams: newTeams, seasonTradesLeft: seasonTradesLeft - 1, seasonTradeLog: newLog, seasonTradeTarget: null });
   },
 
   skipTradeWindow: () => {
-    const { seasonStandings, seasonTeams } = get();
-    const playIn = seasonStandings ? buildPlayInFull(seasonTeams, seasonStandings) : null;
-    set({ seasonStatus: 'play_in', seasonTradeTarget: null, playInBracket: playIn, playInSeeds: null });
+    const { seasonStandings, seasonTeams, seasonGameIndex, seasonSchedule,
+            save, userName, seasonLength, seasonConference, difficulty,
+            seasonRosterFull, seasonTrainingPoints, seasonBudget, seasonTradesLeft,
+            seasonTradeLog, playoffBracket } = get();
+    const seasonDone = seasonGameIndex >= seasonSchedule.length;
+    const newPlayIn = seasonDone && seasonStandings ? buildPlayInFull(seasonTeams, seasonStandings) : null;
+    const newStatus = seasonDone ? 'play_in' : 'regular_season';
+    if (save) {
+      const sv = clone(save);
+      sv.activeSeason = { status: newStatus as SeasonSave['status'], length: seasonLength, conference: seasonConference, difficulty, teams: seasonTeams, schedule: seasonSchedule, gameIndex: seasonGameIndex, standings: seasonStandings, rosterBudget: seasonBudget, roster: seasonRosterFull, trainingPoints: seasonTrainingPoints, tradesLeft: seasonTradesLeft, tradeLog: seasonTradeLog, playInBracket: newPlayIn, playInSeeds: null, playoffBracket };
+      persistSave(userName, sv);
+      set({ save: sv, seasonStatus: newStatus, seasonTradeTarget: null, playInBracket: newPlayIn, playInSeeds: null });
+    } else {
+      set({ seasonStatus: newStatus, seasonTradeTarget: null, playInBracket: newPlayIn, playInSeeds: null });
+    }
   },
 
   simPlayIn: () => {
@@ -914,6 +1194,30 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
 
     set({ playoffBracket: { eastRounds, westRounds, finals, champion } });
+    // Persist updated playoff state
+    const ps = get();
+    if (ps.save) {
+      const sv = clone(ps.save);
+      if (sv.activeSeason) sv.activeSeason = { ...sv.activeSeason, playoffBracket: { eastRounds, westRounds, finals, champion } };
+      persistSave(ps.userName, sv);
+      set({ save: sv });
+    }
+  },
+
+  completeSeasonRun: () => {
+    const { save, userName, seasonTeams, seasonRosterFull, playoffBracket } = get();
+    if (!save) return;
+    const sv = clone(save);
+    if (sv.activeSeason) sv.activeSeason = { ...sv.activeSeason, status: 'complete' };
+    const humanWon = !!playoffBracket?.champion?.isHuman;
+    if (humanWon) {
+      sv.coins += 250;
+      sv.stats.titles += 1;
+    }
+    persistSave(userName, sv);
+    set({ save: sv, seasonStatus: 'complete' });
+    // fire-and-forget Supabase sync
+    import('@/app/actions/game').then(({ syncSave }) => syncSave(sv)).catch(() => {});
   },
 
   viewFriends:  () => set(s => ({ prevPhase: s.phase, phase: 'friends' })),
